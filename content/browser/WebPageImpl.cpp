@@ -44,6 +44,9 @@
 #include "third_party/WebKit/Source/wtf/text/WTFStringUtil.h"
 #include "third_party/WebKit/Source/bindings/core/v8/V8GCController.h"
 
+//zzs
+#include "third_party/WebKit/public/web/win/WebFontRendering.h"
+
 #include "gin/public/isolate_holder.h"
 #include "gin/array_buffer.h"
 #include "ui/gfx/win/dpi.h"
@@ -105,6 +108,9 @@ void WebPageImpl::initBlink()
     blink::Platform::initialize(platform);
     gin::IsolateHolder::Initialize(gin::IsolateHolder::kNonStrictMode, gin::ArrayBufferAllocator::SharedInstance());
     blink::initialize(blink::Platform::current());
+	
+	//zzs
+	blink::WebFontRendering::setDeviceScaleFactor(gfx::win::GetDeviceScaleFactor());
 
 	initializeOffScreenTimerWindow();
 
@@ -1388,7 +1394,17 @@ WebScreenInfo WebPageImpl::screenInfo()
     info.rect = WebRect(winRectToIntRect(mi.rcMonitor));
     info.availableRect = WebRect(winRectToIntRect(mi.rcWork));
 
+	//zzs
+	info.deviceScaleFactor = deviceScaleFactor();
+	info.depth = 24;
+	info.depthPerComponent = 8;
     return info;
+}
+
+//zzs
+float WebPageImpl::deviceScaleFactor()
+{
+	return gfx::win::GetDeviceScaleFactor();
 }
 
 WebWidget* WebPageImpl::createPopupMenu(WebPopupType type)

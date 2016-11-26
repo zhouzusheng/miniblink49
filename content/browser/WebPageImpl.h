@@ -66,6 +66,10 @@ public:
     virtual blink::WebStorageNamespace* createSessionStorageNamespace() OVERRIDE;
     virtual blink::WebString acceptLanguages() OVERRIDE;
     virtual blink::WebScreenInfo screenInfo() OVERRIDE;
+
+	//zzs
+	virtual float deviceScaleFactor();
+
     // Editing --------------------------------------------------------
     virtual bool handleCurrentKeyboardEvent() OVERRIDE;
 

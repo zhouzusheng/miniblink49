@@ -751,6 +751,9 @@
     <Filter Include="content\web_impl_win\npapi">
       <UniqueIdentifier>{26eb4eab-b806-4651-8467-46a5636674e0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="third_party\Webkit\Source\web\win">
+      <UniqueIdentifier>{5bb1e80a-17b5-4d18-905c-36cd14f23898}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\third_party\WebKit\Source\bindings\core\v8\ActiveDOMCallback.cpp">
@@ -8990,6 +8993,9 @@
     </ClCompile>
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\image-decoders\GDIPlus\GDIPlusReader.cpp">
       <Filter>third_party\Webkit\Source\platform\image-decoders\GDIPlus</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\WebKit\Source\web\win\WebFontRendering.cpp">
+      <Filter>third_party\Webkit\Source\web\win</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

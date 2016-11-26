@@ -125,6 +125,7 @@
       <ShowProgress>NotSet</ShowProgress>
       <EntryPointSymbol>
       </EntryPointSymbol>
+      <LinkTimeCodeGeneration>UseFastLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -2000,6 +2001,7 @@
     <ClCompile Include="..\..\third_party\WebKit\Source\web\WebUserGestureIndicator.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\web\WebUserGestureToken.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\web\WebViewImpl.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\web\win\WebFontRendering.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\wtf\Partitions.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\wtf\text\qt4\UnicodeQt4.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\wtf\text\UTF8.cpp" />

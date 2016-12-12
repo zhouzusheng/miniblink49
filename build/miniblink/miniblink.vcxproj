@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -20,13 +20,13 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <PlatformToolset>v140_xp</PlatformToolset>
+    <PlatformToolset>v141_xp</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <PlatformToolset>v140_xp</PlatformToolset>
+    <PlatformToolset>v141_xp</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -105,7 +105,7 @@
       <StringPooling>true</StringPooling>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <EnableEnhancedInstructionSet>NoExtensions</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions</EnableEnhancedInstructionSet>
       <AdditionalOptions>/Zc:threadSafeInit- %(AdditionalOptions)</AdditionalOptions>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -300,6 +300,7 @@
     <ClCompile Include="..\..\cef\libcef_dll\notImplemented_cef.cpp" />
     <ClCompile Include="..\..\cef\libcef_dll\transfer_util.cc" />
     <ClCompile Include="..\..\cef\libcef_dll\unused_export.cpp" />
+    <ClCompile Include="..\..\content\browser\NavigationController.cpp" />
     <ClCompile Include="..\..\content\browser\PlatformEventHandler.cpp" />
     <ClCompile Include="..\..\content\browser\PopupMenuWin.cpp" />
     <ClCompile Include="..\..\content\browser\WebFrameClientImpl.cpp" />
@@ -3149,6 +3150,7 @@
     <ClInclude Include="..\..\cef\libcef_dll\cpptoc\frame_cpptoc.h" />
     <ClInclude Include="..\..\cef\libcef_dll\ctocpp\resolve_callback_ctocpp.h" />
     <ClInclude Include="..\..\cef\libcef_dll\ctocpp\response_filter_ctocpp.h" />
+    <ClInclude Include="..\..\content\browser\NavigationController.h" />
     <ClInclude Include="..\..\content\browser\PlatformEventHandler.h" />
     <ClInclude Include="..\..\content\browser\PopupMenuWin.h" />
     <ClInclude Include="..\..\content\browser\SharedTimerWin.h" />

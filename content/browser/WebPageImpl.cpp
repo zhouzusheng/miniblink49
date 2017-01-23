@@ -158,6 +158,7 @@ WebPageImpl::WebPageImpl()
     m_postCloseWidgetSoonMessage = false;
     
     m_layerTreeHost = new cc::LayerTreeHost(this);
+	m_layerTreeHost->setDeviceScaleFactor(deviceScaleFactor());
 
     m_webFrameClient = new content::WebFrameClientImpl();
     
@@ -954,7 +955,7 @@ void WebPageImpl::setViewportSize(const IntSize& size)
 //     String outString = String::format("WebPageImpl::setViewportSize: %d %d\n", size.width(), size.height());
 //     OutputDebugStringW(outString.charactersWithNullTermination().data());
 
-    if (m_layerTreeHost)
+    if (m_layerTreeHost) {}
         m_layerTreeHost->setViewportSize(size);
 
     m_webViewImpl->resize(size);

@@ -107,6 +107,8 @@ public:
     bool fireKeyDownEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
     bool fireKeyPressEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
+    int getCursorInfoType() const;
+
     HDC viewDC();
     void paintToBit(void* bits, int pitch);
     
@@ -138,6 +140,8 @@ public:
     virtual void navigateBackForwardSoon(int offset) override;
     virtual int historyBackListCount() override;
     virtual int historyForwardListCount() override;
+
+    static WebPageImpl* getSelfForCurrentContext();
 
 	bool initSetting();
 #if (defined ENABLE_CEF) && (ENABLE_CEF == 1)

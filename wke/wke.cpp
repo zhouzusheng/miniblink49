@@ -11,6 +11,9 @@
 #include "wkeString.h"
 #include "wkeWebView.h"
 #include "wkeWebWindow.h"
+#include "third_party/WebKit/public/web/WebKit.h"
+#include "third_party/WebKit/public/web/WebFrame.h"
+#include <v8.h>
 #include "wtf/text/WTFString.h"
 
 namespace net {
@@ -611,6 +614,16 @@ void wkeOnDownload(wkeWebView webView, wkeDownloadCallback callback, void* param
 	webView->onDownload(callback, param);
 }
 
+void wkeOnConsole(wkeWebView webView, wkeConsoleCallback callback, void* param)
+{
+    webView->onConsole(callback, param);
+}
+
+void wkeSetUIThreadCallback(wkeWebView webView, wkeCallUiThread callback, void* param)
+{
+    webView->onCallUiThread(callback, param);
+}
+
 void wkeOnLoadUrlBegin(wkeWebView webView, wkeLoadUrlBeginCallback callback, void* callbackParam)
 {
 	webView->onLoadUrlBegin(callback, callbackParam);
@@ -619,6 +632,47 @@ void wkeOnLoadUrlBegin(wkeWebView webView, wkeLoadUrlBeginCallback callback, voi
 void wkeOnLoadUrlEnd(wkeWebView webView, wkeLoadUrlEndCallback callback, void* callbackParam)
 {
 	webView->onLoadUrlEnd(callback, callbackParam);
+}
+
+
+void wkeOnDidCreateScriptContext(wkeWebView webView, wkeDidCreateScriptContextCallback callback, void* callbackParam)
+{
+    webView->onDidCreateScriptContext(callback, callbackParam);
+}
+
+void wkeOnWillReleaseScriptContext(wkeWebView webView, wkeWillReleaseScriptContextCallback callback, void* callbackParam)
+{
+    webView->onWillReleaseScriptContext(callback, callbackParam);
+}
+
+bool wkeWebFrameIsMainFrame(wkeWebFrameHandle webFrame)
+{
+    blink::WebFrame* frame = (blink::WebFrame*)webFrame;
+    return !frame->parent();
+}
+
+bool wkeIsWebRemoteFrame(wkeWebFrameHandle webFrame)
+{
+    blink::WebFrame* frame = (blink::WebFrame*)webFrame;
+    return frame->isWebRemoteFrame();
+}
+
+wkeWebFrameHandle wkeWebFrameGetMainFrame(wkeWebView webView)
+{
+    return webView->webPage()->mainFrame();
+}
+
+void wkeWebFrameGetMainWorldScriptContext(wkeWebFrameHandle wkeFrame, v8ContextPtr contextOut)
+{
+    blink::WebFrame* frame = (blink::WebFrame*)wkeFrame;
+    v8::Local<v8::Context> result = frame->mainWorldScriptContext();
+    v8::Local<v8::Context>* contextOutPtr = (v8::Local<v8::Context>*)contextOut;
+    *contextOutPtr = result;
+}
+
+v8Isolate wkeGetBlinkMainThreadIsolate()
+{
+    return blink::mainThreadIsolate();
 }
 
 const utf8* wkeGetString(const wkeString s)
@@ -663,6 +717,45 @@ void wkeSetStringW(wkeString string, const wchar_t* str, size_t len)
     string->setString(str, len);
 }
 
+WKE_API wkeString wkeCreateStringW(const wchar_t* str, size_t len)
+{
+    wkeString wkeStr = new wke::CString(str, len);
+    return wkeStr;
+}
+
+WKE_API void wkeDeleteString(wkeString str)
+{
+    delete str;
+}
+
+wkeWebView wkeGetWebViewForCurrentContext()
+{
+    content::WebPage* webpage = content::WebPage::getSelfForCurrentContext();
+    if (!webpage)
+        return nullptr;
+    wkeWebView webview = webpage->wkeWebView();
+    return webview;
+}
+
+WKE_API void wkeSetUserKayValue(wkeWebView webView, const char* key, void* value)
+{
+    webView->setUserKayValue(key, value);
+}
+
+WKE_API void* wkeGetUserKayValue(wkeWebView webView, const char* key)
+{
+    return webView->getUserKayValue(key);
+}
+
+WKE_API int wkeGetCursorInfoType(wkeWebView webView)
+{
+    return webView->getCursorInfoType();
+}
+
+WKE_API void wkeSetDragFiles(wkeWebView webView, const POINT* clintPos, const POINT* screenPos, wkeString files[], int filesCount)
+{
+    webView->setDragFiles(clintPos, screenPos, files, filesCount);
+}
 
 // typedef void (__cdecl* _PVFV) ();
 // #pragma section(".CRT$XCG", long, read)

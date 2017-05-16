@@ -847,6 +847,7 @@ namespace content {
 			::PostMessage(m_hWnd, WM_SETCURSOR, 0, 0);
 	}
 
+<<<<<<< HEAD
 	void WebPageImpl::fireCursorEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, BOOL* handle)
 	{
 		CHECK_FOR_REENTER0();
@@ -895,6 +896,68 @@ namespace content {
 			hCur = ::LoadCursor(NULL, IDC_SIZEALL);
 			break;
 		}
+=======
+int WebPageImpl::getCursorInfoType() const
+{
+    return (int)m_cursorType;
+}
+
+void WebPageImpl::fireCursorEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, BOOL* handle)
+{
+    CHECK_FOR_REENTER0();
+    freeV8TempObejctOnOneFrameBefore();
+
+    if (handle)
+        *handle = FALSE;
+    HCURSOR hCur = NULL;
+    switch (m_cursorType) {
+    case WebCursorInfo::TypeIBeam:
+        hCur = ::LoadCursor(NULL, IDC_IBEAM);
+        break;
+    case WebCursorInfo::TypeHand:
+        hCur = ::LoadCursor(NULL, IDC_HAND);
+        break;
+    case WebCursorInfo::TypeWait:
+        hCur = ::LoadCursor(NULL, IDC_WAIT);
+        break;
+    case WebCursorInfo::TypeHelp:
+        hCur = ::LoadCursor(NULL, IDC_HELP);
+        break;
+    case WebCursorInfo::TypeEastResize:
+        hCur = ::LoadCursor(NULL, IDC_SIZEWE);
+        break;
+    case WebCursorInfo::TypeNorthResize:
+        hCur = ::LoadCursor(NULL, IDC_SIZENS);
+        break;
+    case WebCursorInfo::TypeSouthWestResize:
+    case WebCursorInfo::TypeNorthEastResize:
+        hCur = ::LoadCursor(NULL, IDC_SIZENESW);
+        break;
+    case WebCursorInfo::TypeSouthResize:
+    case WebCursorInfo::TypeNorthSouthResize:
+        hCur = ::LoadCursor(NULL, IDC_SIZENS);
+        break;
+    case WebCursorInfo::TypeNorthWestResize:
+    case WebCursorInfo::TypeSouthEastResize:
+        hCur = ::LoadCursor(NULL, IDC_SIZENWSE);
+        break;
+    case WebCursorInfo::TypeWestResize:
+    case WebCursorInfo::TypeEastWestResize:
+        hCur = ::LoadCursor(NULL, IDC_SIZEWE);
+        break;
+    case WebCursorInfo::TypeNorthEastSouthWestResize:
+    case WebCursorInfo::TypeNorthWestSouthEastResize:
+        hCur = ::LoadCursor(NULL, IDC_SIZEALL);
+        break;
+    }
+
+    if (hCur) {
+        ::SetCursor(hCur);
+        if (handle)
+            *handle = TRUE;
+    }
+}
+>>>>>>> weolar/master
 
 		if (hCur) {
 			::SetCursor(hCur);
@@ -1195,6 +1258,19 @@ namespace content {
 		AutoRecordActions autoRecordActions(m_layerTreeHost);
 		webFrame->loadHTMLString(html, baseURL, unreachableURL, replace);
 	}
+
+WebPageImpl* WebPageImpl::getSelfForCurrentContext()
+{
+    blink::WebLocalFrame* frame = blink::WebLocalFrame::frameForCurrentContext();
+    if (!frame)
+        return nullptr;
+    blink::WebViewImpl* impl = (blink::WebViewImpl*)frame->view();
+    if (!impl)
+        return nullptr;
+
+    content::WebPageImpl* page = (content::WebPageImpl*)impl->client();
+    return page;
+}
 
 #if (defined ENABLE_CEF) && (ENABLE_CEF == 1)
 	CefBrowserHostImpl* WebPageImpl::browser() const

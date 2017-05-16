@@ -3,6 +3,7 @@
 #include "v8.h"
 #include "env.h"
 #include "env-inl.h"
+#include "gin/public/isolate_holder.h"
 
 namespace node {
 namespace util {
@@ -13,7 +14,9 @@ using v8::FunctionCallbackInfo;
 using v8::Local;
 using v8::Object;
 using v8::Private;
+#if !(V8_MAJOR_VERSION == 4 && V8_MINOR_VERSION == 8)
 using v8::Proxy;
+#endif
 using v8::String;
 using v8::Value;
 
@@ -43,6 +46,7 @@ using v8::Value;
 
 static void GetProxyDetails(const FunctionCallbackInfo<Value>& args) {
   // Return undefined if it's not a proxy.
+#if !(V8_MAJOR_VERSION == 4 && V8_MINOR_VERSION == 8)
   if (!args[0]->IsProxy())
     return;
 
@@ -53,6 +57,7 @@ static void GetProxyDetails(const FunctionCallbackInfo<Value>& args) {
   ret->Set(1, proxy->GetHandler());
 
   args.GetReturnValue().Set(ret);
+#endif
 }
 
 static void GetHiddenValue(const FunctionCallbackInfo<Value>& args) {
@@ -130,6 +135,40 @@ void Initialize(Local<Object> target,
 }
 
 }  // namespace util
+
+void* Realloc(void* pointer, size_t size) {
+    void* newPtr = nullptr;
+    if (!pointer) {
+        if (size != 0)
+            newPtr = gin::IsolateHolder::get_allocator()->Allocate(size);
+        return newPtr;
+    }
+
+    size_t oldSize = gin::IsolateHolder::GetPointerMemSize(pointer);
+    if (size == 0) {
+        gin::IsolateHolder::get_allocator()->Free(pointer, gin::IsolateHolder::GetPointerMemSize(pointer));
+        return nullptr;
+    }
+ 
+    newPtr = gin::IsolateHolder::get_allocator()->Allocate(size);
+    size_t copySize = oldSize < size ? oldSize : size;
+    memcpy(newPtr, pointer, copySize);
+    return newPtr;
+}
+
+// As per spec realloc behaves like malloc if passed nullptr.
+void* Malloc(size_t size) {
+    if (size == 0) size = 1;
+    return Realloc(nullptr, size);
+}
+
+void* Calloc(size_t n, size_t size) {
+    if (n == 0) n = 1;
+    if (size == 0) size = 1;
+    CHECK_GE(n * size, n);  // Overflow guard.
+    return calloc(n, size);
+}
+
 }  // namespace node
 
 NODE_MODULE_CONTEXT_AWARE_BUILTIN(util, node::util::Initialize)

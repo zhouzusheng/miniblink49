@@ -144,6 +144,11 @@ static void After(uv_fs_t *req) {
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
 
+#ifndef MINIBLINK_NOT_IMPLEMENTED
+  if (env->is_blink_core())
+    env->BlinkMicrotaskSuppressionEnter(env);
+#endif
+
   // there is always at least one argument. "error"
   int argc = 1;
 
@@ -319,6 +324,11 @@ static void After(uv_fs_t *req) {
   }
 
   req_wrap->MakeCallback(env->oncomplete_string(), argc, argv);
+
+#ifndef MINIBLINK_NOT_IMPLEMENTED
+  if (env->is_blink_core())
+    env->BlinkMicrotaskSuppressionLeave(env);
+#endif
 
   uv_fs_req_cleanup(req_wrap->req());
   req_wrap->Dispose();
@@ -515,13 +525,21 @@ Local<Value> BuildStatsObject(Environment* env, const uv_stat_t* s) {
     birthtim_msec
   };
 
+#ifndef MINIBLINK_NOT_IMPLEMENTED
+  if (env->is_blink_core())
+    env->BlinkMicrotaskSuppressionEnter(env);
+#endif
+
   // Call out to JavaScript to create the stats object.
   Local<Value> stats =
       env->fs_stats_constructor_function()->NewInstance(
           env->context(),
           arraysize(argv),
           argv).FromMaybe(Local<Value>());
-
+#ifndef MINIBLINK_NOT_IMPLEMENTED
+  if (env->is_blink_core())
+    env->BlinkMicrotaskSuppressionLeave(env);
+#endif
   if (stats.IsEmpty())
     return handle_scope.Escape(Local<Object>());
 
@@ -597,7 +615,13 @@ static void InternalModuleStat(const FunctionCallbackInfo<Value>& args) {
 
   CHECK(args[0]->IsString());
   node::Utf8Value path(env->isolate(), args[0]);
-
+  if (env->file_system_hooks()) {
+      int rc;
+      if (env->file_system_hooks()->internalModuleStat(*path, &rc)) {
+          args.GetReturnValue().Set(rc);
+          return;
+      }
+  }
   uv_fs_t req;
   int rc = uv_fs_stat(env->event_loop(), &req, *path, nullptr);
   if (rc == 0) {
@@ -990,7 +1014,9 @@ static void ReadDir(const FunctionCallbackInfo<Value>& args) {
     args.GetReturnValue().Set(names);
   }
 }
+static int _open(const char * pathname, int flags, int mode) {
 
+}
 static void Open(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 

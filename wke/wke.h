@@ -340,6 +340,37 @@ WKE_API const wchar_t* wkeGetStringW(const wkeString string);
 WKE_API void wkeSetString(wkeString string, const utf8* str, size_t len);
 WKE_API void wkeSetStringW(wkeString string, const wchar_t* str, size_t len);
 
+WKE_API wkeString wkeCreateStringW(const wchar_t* str, size_t len);
+WKE_API void wkeDeleteString(wkeString str);
+
+WKE_API wkeWebView wkeGetWebViewForCurrentContext();
+WKE_API void wkeSetUserKayValue(wkeWebView webView, const char* key, void* value);
+WKE_API void* wkeGetUserKayValue(wkeWebView webView, const char* key);
+
+#define WkeCursorInfoPointer 0
+#define WkeCursorInfoCross 1
+#define WkeCursorInfoHand 2
+#define WkeCursorInfoIBeam 3
+#define WkeCursorInfoWait 4
+#define WkeCursorInfoHelp 5
+#define WkeCursorInfoEastResize 6
+#define WkeCursorInfoNorthResize 7
+#define WkeCursorInfoNorthEastResize 8
+#define WkeCursorInfoNorthWestResize 9
+#define WkeCursorInfoSouthResize 10
+#define WkeCursorInfoSouthEastResize 11
+#define WkeCursorInfoSouthWestResize 12
+#define WkeCursorInfoWestResize 13
+#define WkeCursorInfoNorthSouthResize 14
+#define WkeCursorInfoEastWestResize 15
+#define WkeCursorInfoNorthEastSouthWestResize 16
+#define WkeCursorInfoNorthWestSouthEastResize 17
+#define WkeCursorInfoColumnResize 18
+#define WkeCursorInfoRowResize 19
+
+WKE_API int wkeGetCursorInfoType(wkeWebView webView);
+WKE_API void wkeSetDragFiles(wkeWebView webView, const POINT* clintPos, const POINT* screenPos, wkeString files[], int filesCount);
+
 //wke callback-----------------------------------------------------------------------------------
 typedef void(*wkeTitleChangedCallback)(wkeWebView webView, void* param, const wkeString title);
 WKE_API void wkeOnTitleChanged(wkeWebView webView, wkeTitleChangedCallback callback, void* callbackParam);
@@ -404,6 +435,22 @@ WKE_API void wkeOnLoadingFinish(wkeWebView webView, wkeLoadingFinishCallback cal
 typedef bool(*wkeDownloadCallback)(wkeWebView webView, void* param, const char *url);
 WKE_API void wkeOnDownload(wkeWebView webView, wkeDownloadCallback callback, void* param);
 
+typedef enum {
+    wkeLevelDebug = 4,
+    wkeLevelLog = 1,
+    wkeLevelInfo = 5,
+    wkeLevelWarning = 2,
+    wkeLevelError = 3,
+    wkeLevelRevokedError = 6,
+    wkeLevelLast = wkeLevelInfo
+} wkeConsoleLevel;
+typedef void(*wkeConsoleCallback)(wkeWebView webView, void* param, wkeConsoleLevel level, const wkeString message, const wkeString sourceName, unsigned sourceLine, const wkeString stackTrace);
+WKE_API void wkeOnConsole(wkeWebView webView, wkeConsoleCallback callback, void* param);
+
+typedef void(*wkeOnCallUiThread)(wkeWebView webView, void* paramOnInThread);
+typedef void(*wkeCallUiThread)(wkeWebView webView, wkeOnCallUiThread func, void* param);
+WKE_API void wkeSetUIThreadCallback(wkeWebView webView, wkeCallUiThread callback, void* param);
+
 //wkeNet--------------------------------------------------------------------------------------
 typedef bool(*wkeLoadUrlBeginCallback)(wkeWebView webView, void* param, const char *url, void *job);
 WKE_API void wkeOnLoadUrlBegin(wkeWebView webView, wkeLoadUrlBeginCallback callback, void* callbackParam);
@@ -411,12 +458,29 @@ WKE_API void wkeOnLoadUrlBegin(wkeWebView webView, wkeLoadUrlBeginCallback callb
 typedef void(*wkeLoadUrlEndCallback)(wkeWebView webView, void* param, const char *url, void *job, void* buf, int len);
 WKE_API void wkeOnLoadUrlEnd(wkeWebView webView, wkeLoadUrlEndCallback callback, void* callbackParam);
 
+typedef void* wkeWebFrameHandle;
+typedef void(*wkeDidCreateScriptContextCallback)(wkeWebView webView, void* param, wkeWebFrameHandle frame, void* context, int extensionGroup, int worldId);
+WKE_API void wkeOnDidCreateScriptContext(wkeWebView webView, wkeDidCreateScriptContextCallback callback, void* callbackParam);
+
+typedef void(*wkeWillReleaseScriptContextCallback)(wkeWebView webView, void* param, wkeWebFrameHandle frame, void* context, int worldId);
+WKE_API void wkeOnWillReleaseScriptContext(wkeWebView webView, wkeWillReleaseScriptContextCallback callback, void* callbackParam);
 
 WKE_API void wkeNetSetMIMEType(void *job, char *type);
 WKE_API void wkeNetSetHTTPHeaderField(void *job, wchar_t *key, wchar_t *value, bool response);
 WKE_API void wkeNetSetURL(void *job, const char *url);
 WKE_API void wkeNetSetData(void *job, void *buf, int len);
 WKE_API void wkeNetHookRequest(void *job);	//调用此函数后,网络层收到数据会存储在一buf内,接收数据完成后响应OnLoadUrlEnd事件.#此调用严重影响性能,慎用
+
+WKE_API bool wkeWebFrameIsMainFrame(wkeWebFrameHandle webFrame);
+WKE_API bool wkeIsWebRemoteFrame(wkeWebFrameHandle webFrame);
+WKE_API wkeWebFrameHandle wkeWebFrameGetMainFrame(wkeWebView webView);
+
+typedef void* v8ContextPtr;
+WKE_API void wkeWebFrameGetMainWorldScriptContext(wkeWebFrameHandle frame, v8ContextPtr contextOut);
+
+typedef void* v8Isolate;
+WKE_API v8Isolate wkeGetBlinkMainThreadIsolate();
+
 //wkewindow-----------------------------------------------------------------------------------
 typedef enum {
     WKE_WINDOW_TYPE_POPUP,

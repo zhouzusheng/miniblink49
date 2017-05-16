@@ -19,13 +19,7 @@
 #ifdef USE_TR1_TYPE_TRAITS
 #include <tr1/type_traits>  // NOLINT(build/c++tr1)
 #else
-
-#if USING_VC6RT != 1
 #include <type_traits>  // std::remove_reference
-#else
-#include <type_traits_vc6.h>
-#endif
-
 #endif
 
 namespace node {
@@ -37,9 +31,9 @@ namespace node {
 // that the standard allows them to either return a unique pointer or a
 // nullptr for zero-sized allocation requests.  Normalize by always using
 // a nullptr.
-inline void* Realloc(void* pointer, size_t size);
-inline void* Malloc(size_t size);
-inline void* Calloc(size_t n, size_t size);
+void* Realloc(void* pointer, size_t size);
+void* Malloc(size_t size);
+void* Calloc(size_t n, size_t size);
 
 #ifdef __GNUC__
 #define NO_RETURN __attribute__((noreturn))
@@ -354,7 +348,7 @@ class MaybeStackBuffer {
 
   ~MaybeStackBuffer() {
     if (buf_ != buf_st_)
-      free(buf_);
+      Realloc(buf_, 0);
   }
 
  private:

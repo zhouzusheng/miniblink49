@@ -1,15 +1,12 @@
-﻿
-#include "electron.h"
+﻿#include "electron.h"
 
 #include "common/ThreadCall.h"
-#include "NodeRegisterHelp.h"
+#include "common/NodeRegisterHelp.h"
+#include "common/NodeThread.h"
+#include "common/AtomCommandLine.h"
+#include "third_party/zlib/unzip.h"
 #include "NodeBlink.h"
-#include "lib/native.h"
 #include <windows.h>
-#include "base/thread.h"
-
-using namespace v8;
-using namespace node;
 
 #if USING_VC6RT == 1
 void __cdecl operator delete(void * p, unsigned int)
@@ -20,62 +17,93 @@ void __cdecl operator delete(void * p, unsigned int)
 extern "C" int __security_cookie = 0;
 #endif
 
+#pragma comment(lib,"zlib.lib")
+#pragma comment(lib, "Psapi.lib")
+#pragma comment(lib, "IPHLPAPI.lib")
+#pragma comment(lib, "Userenv.lib")
+#pragma comment(lib, "Psapi.lib")
+
 namespace atom {
 
-uv_timer_t gcTimer;
+unzFile gPeResZip = nullptr;
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_browser_web_contents)
-NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_browser_app)
-NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_browser_window)
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_browser_web_contents);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_browser_app);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_browser_electron);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_browser_window);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_browser_menu);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_browser_dialog);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_renderer_ipc);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_common_v8_util);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_common_shell);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_common_original_fs);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_common_screen);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_renerer_webframe);
+NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DECLARE_IN_MAIN(atom_common_intl_collator);
 
 static void registerNodeMod() {
     NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_browser_web_contents);
     NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_browser_app);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_browser_electron);
     NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_browser_window);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_browser_menu);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_browser_dialog);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_renderer_ipc);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_common_v8_util);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_common_shell);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_common_original_fs);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_common_screen);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_renerer_webframe);
+    NODE_MODULE_CONTEXT_AWARE_BUILTIN_SCRIPT_DEFINDE_IN_MAIN(atom_common_intl_collator);
 }
 
-static void gcTimerCallBack(uv_timer_t* handle) {
-    return;
+static void initPeRes(HINSTANCE hInstance) {
+    PIMAGE_DOS_HEADER pDosH = (PIMAGE_DOS_HEADER)hInstance;
+    if (pDosH->e_magic != IMAGE_DOS_SIGNATURE)
+        return; // DOS头不正确
+    PIMAGE_NT_HEADERS32 pNtH = (PIMAGE_NT_HEADERS32)((DWORD)hInstance + (DWORD)pDosH->e_lfanew);
+    if (pNtH->Signature != IMAGE_NT_SIGNATURE)
+        return; // NT头不正确
+    PIMAGE_SECTION_HEADER pSecHTemp = IMAGE_FIRST_SECTION(pNtH); // 区段头
 
-    v8::Isolate *isolate = (v8::Isolate *)(handle->data);
-    if (isolate)
-        isolate->LowMemoryNotification();
-}
-
-void nodeInitCallBack(NodeArgc* n) {
-    base::SetThreadName("NodeCore");
-    gcTimer.data = n->childEnv->isolate();
-    uv_timer_init(n->childLoop, &gcTimer);
-    uv_timer_start(&gcTimer, gcTimerCallBack, 1000 * 10, 1);
-
-    uv_loop_t* loop = n->childLoop;
-    atom::ThreadCall::init(loop);
-    atom::ThreadCall::messageLoop(loop);
+    for (size_t index = 0; index < pNtH->FileHeader.NumberOfSections; index++) {
+        if (memcmp(pSecHTemp->Name, ".pack\0\0\0", 8) == 0) { // 比较区段名
+            // 找到资源包区段
+            gPeResZip = unzOpen(NULL, hInstance + pSecHTemp->VirtualAddress + pSecHTemp->PointerToRawData, pSecHTemp->Misc.VirtualSize);
+        }
+        ++pSecHTemp;
+    }
 }
 
 } // atom
 
-int APIENTRY wWinMain(HINSTANCE hInstance,
-    HINSTANCE hPrevInstance,
-    LPTSTR    lpCmdLine,
-    int       nCmdShow) {
+int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow) {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
+    atom::AtomCommandLine::initAW();
+    atom::ThreadCall::setMainThread();
+    atom::initPeRes(hInstance); // 初始化PE打包的资源
     atom::registerNodeMod();
-    
-    atom::ThreadCall::createBlinkThread();
-    
-    wchar_t* argv1[] = { L"electron.exe", L"init.js" };
-    node::NodeArgc* node = node::runNodeThread(2, argv1, atom::nodeInitCallBack, nullptr);
+
+    // E:\mycode\vscode-master\out\main.js
+    // E:\mycode\miniblink49\trunk\electron\lib\test\css3-3d-cube-loading\main.js
+    std::vector<std::wstring> argv = atom::AtomCommandLine::wargv();
+    if (-1 != argv[1].find(L"bootstrap", 0)) {
+        //MessageBoxW(0, 0, 0, 0);
+    }
+
+    atom::NodeArgc* node = atom::runNodeThread();
     
     uv_loop_t* loop = uv_default_loop();
-    atom::ThreadCall::messageLoop(loop);
+    atom::ThreadCall::messageLoop(loop, nullptr, nullptr);
     atom::ThreadCall::shutdown();
+
+    //delete atom::kResPath;
 
 	return 0;
 }
 
 int main() {
-    return wWinMain(0, 0, 0, 0);
+    return wWinMain(::GetModuleHandle(NULL), 0, 0, 0);
 }

@@ -8,11 +8,13 @@
 #include "wkeWebView.h"
 #include "wkeJsBind.h"
 
+#include "content/web_impl_win/BlinkPlatformImpl.h"
+#include "content/browser/WebFrameClientImpl.h"
+
+#include "third_party/WebKit/public/platform/WebDragData.h"
 #include "third_party/WebKit/public/web/WebScriptSource.h"
 #include "third_party/WebKit/Source/web/WebViewImpl.h"
 #include "third_party/WebKit/Source/wtf/text/WTFStringUtil.h"
-#include "content/web_impl_win/BlinkPlatformImpl.h"
-#include "content/browser/WebFrameClientImpl.h"
 
 #undef  PURE
 #define PURE = 0;
@@ -953,6 +955,18 @@ void CWebView::onDownload(wkeDownloadCallback callback, void* callbackParam)
 	m_webPage->wkeHandler().downloadCallbackParam = callbackParam;
 }
 
+void CWebView::onConsole(wkeConsoleCallback callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().consoleCallback = callback;
+    m_webPage->wkeHandler().consoleCallbackParam = callbackParam;
+}
+
+void CWebView::onCallUiThread(wkeCallUiThread callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().callUiThreadCallback = callback;
+    m_webPage->wkeHandler().callUiThreadCallbackParam = callbackParam;
+}
+
 void CWebView::onDocumentReady(wkeDocumentReadyCallback callback, void* callbackParam)
 {
     m_webPage->wkeHandler().documentReadyCallback = callback;
@@ -971,6 +985,18 @@ void CWebView::onLoadUrlEnd(wkeLoadUrlEndCallback callback, void* callbackParam)
 	m_webPage->wkeHandler().loadUrlEndCallbackParam = callbackParam;
 }
 
+void CWebView::onDidCreateScriptContext(wkeDidCreateScriptContextCallback callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().didCreateScriptContextCallback = callback;
+    m_webPage->wkeHandler().didCreateScriptContextCallbackParam = callbackParam;
+}
+
+void CWebView::onWillReleaseScriptContext(wkeWillReleaseScriptContextCallback callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().willReleaseScriptContextCallback = callback;
+    m_webPage->wkeHandler().willReleaseScriptContextCallbackParam = callbackParam;
+}
+
 void CWebView::setClientHandler(const wkeClientHandler* handler)
 {
     m_webPage->wkeSetClientHandler((void*)handler);
@@ -980,11 +1006,56 @@ const wkeClientHandler* CWebView::getClientHandler() const
 {
     return (const wkeClientHandler *)m_webPage->wkeClientHandler();
 }
-void CWebView::setProxyInfo(const String& host,
-	unsigned long port,
-	net::WebURLLoaderManager::ProxyType type,
-	const String& username,
-	const String& password) {
+
+void CWebView::setUserKayValue(const char* key, void* value)
+{
+    if (!key)
+        return;
+    m_userKayValues[key] = value;
+}
+
+void* CWebView::getUserKayValue(const char* key)
+{
+    if (!key)
+        return nullptr;
+    std::map<std::string, void*>::const_iterator it = m_userKayValues.find(key);
+    if (m_userKayValues.end() == it)
+        return nullptr;
+    return it->second;
+}
+
+int CWebView::getCursorInfoType()
+{
+    return m_webPage->getCursorInfoType();
+}
+
+void CWebView::setDragFiles(const POINT* clintPos, const POINT* screenPos, wkeString files[], int filesCount)
+{
+    blink::WebPoint clientPoint(clintPos->x, clintPos->y);
+    blink::WebPoint screenPoint(screenPos->x, screenPos->y);
+
+    blink::WebDragData webDragData;
+    webDragData.initialize();
+
+    for (int i = 0; i < filesCount; ++i) {
+        WTF::String file = files[i]->original();
+        //GetFileSizeEx();
+        file.insert("file:///", 0);
+    
+        blink::WebDragData::Item it;
+        it.storageType = blink::WebDragData::Item::StorageTypeFileSystemFile;
+        it.fileSystemURL = blink::KURL(blink::ParsedURLString, file);
+        webDragData.addItem(it);
+    }
+
+    blink::WebViewImpl* webView = m_webPage->webViewImpl();
+    webView->dragTargetDragEnter(webDragData, clientPoint, screenPoint, blink::WebDragOperationMove, 0);
+    webView->dragTargetDragOver(clientPoint, screenPoint, blink::WebDragOperationMove, 0);
+    webView->dragTargetDrop(clientPoint, screenPoint, 0);
+}
+
+void CWebView::setProxyInfo(const String& host,	unsigned long port,	net::WebURLLoaderManager::ProxyType type, const String& username, const String& password)
+{
 	m_proxyType = type;
 
 	if (!host.length()) {

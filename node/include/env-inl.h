@@ -106,10 +106,19 @@ inline void Environment::AsyncHooks::set_enable_callbacks(uint32_t flag) {
 inline Environment::AsyncCallbackScope::AsyncCallbackScope(Environment* env)
     : env_(env) {
   env_->makecallback_cntr_++;
+#ifndef MINIBLINK_NOT_IMPLEMENTED
+  if (env->is_blink_core_)
+    env_->BlinkMicrotaskSuppressionEnter(env_);
+#endif
 }
 
 inline Environment::AsyncCallbackScope::~AsyncCallbackScope() {
   env_->makecallback_cntr_--;
+#ifndef MINIBLINK_NOT_IMPLEMENTED
+  if (env_->is_blink_core_)
+    env_->BlinkMicrotaskSuppressionLeave(env_);
+#endif
+
 }
 
 inline bool Environment::AsyncCallbackScope::in_makecallback() {
@@ -229,6 +238,11 @@ inline Environment::Environment(v8::Local<v8::Context> context,
       inspector_agent_(this),
 #endif
       http_parser_buffer_(nullptr),
+#ifndef MINIBLINK_NOT_IMPLEMENTED
+      file_system_hooks_(nullptr),
+      is_blink_core_(false),
+      blink_microtask_suppression_handle_(nullptr),
+#endif
       context_(context->GetIsolate(), context) {
   // We'll be creating new objects so make sure we've entered the context.
   v8::HandleScope handle_scope(isolate());
@@ -349,6 +363,22 @@ inline uv_loop_t* Environment::event_loop() const {
 
 inline Environment::AsyncHooks* Environment::async_hooks() {
   return &async_hooks_;
+}
+
+inline Environment::FileSystemHooks* Environment::file_system_hooks() {
+  return file_system_hooks_;
+}
+
+inline void Environment::set_is_blink_core() {
+  is_blink_core_ = true;
+}
+
+inline bool Environment::is_blink_core() const {
+  return is_blink_core_;        
+}
+
+inline void Environment::file_system_hooks(Environment::FileSystemHooks* h) {
+    file_system_hooks_ = h;
 }
 
 inline Environment::DomainFlag* Environment::domain_flag() {

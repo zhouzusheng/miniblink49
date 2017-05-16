@@ -151,19 +151,23 @@ namespace node {
 #ifdef _WIN32
 		HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
 
+        // Fill in any placeholders
+        int n = _vscprintf(format, ap);
+        std::vector<char> out(n + 1);
+        vsprintf(&out[0], format, ap);
+
 		// Check if stderr is something other than a tty/console
 		if (stderr_handle == INVALID_HANDLE_VALUE ||
 			stderr_handle == nullptr ||
 			uv_guess_handle(_fileno(stderr)) != UV_TTY) {
 			vfprintf(stderr, format, ap);
+            
+            out.push_back('\n');
+            OutputDebugStringA(&out[0]);
+
 			va_end(ap);
 			return;
 		}
-
-		// Fill in any placeholders
-		int n = _vscprintf(format, ap);
-		std::vector<char> out(n + 1);
-		vsprintf(&out[0], format, ap);
 
 		// Get required wide buffer size
 		n = MultiByteToWideChar(CP_UTF8, 0, &out[0], -1, nullptr, 0);
@@ -174,6 +178,9 @@ namespace node {
 		// Don't include the null character in the output
 		CHECK_GT(n, 0);
 		WriteConsoleW(stderr_handle, &wbuf[0], n - 1, nullptr, nullptr);
+
+        wbuf.push_back(L'\n');
+        OutputDebugStringW(&wbuf[0]);
 #else
 		vfprintf(stderr, format, ap);
 #endif
@@ -1926,7 +1933,7 @@ namespace node {
 			env->ThrowError("Module did not self-register.");
 			return;
 		}
-		if (mp->nm_version != NODE_MODULE_VERSION) {
+		if (mp->nm_version != NODE_MODULE_VERSION && mp->nm_version != 50) { // 特别支持下50版
 			char errmsg[1024];
 			snprintf(errmsg,
 				sizeof(errmsg),
@@ -1936,6 +1943,7 @@ namespace node {
 			// NOTE: `mp` is allocated inside of the shared library's memory, calling
 			// `uv_dlclose` will deallocate it
 			uv_dlclose(&lib);
+            ::DebugBreak();
 			env->ThrowError(errmsg);
 			return;
 		}
@@ -1990,6 +1998,30 @@ namespace node {
 
 	void FatalException(Isolate* isolate, Local<Value> error, Local<Message> message) {
 		HandleScope scope(isolate);
+
+        Local<String> error_mesage = message->Get();
+        v8::String::Utf8Value error_mesage_utf8(error_mesage);
+
+        Local<String> messageScriptName = message->GetSourceLine();
+        v8::String::Utf8Value messageScriptNameUtf8(messageScriptName);
+
+        char* error_mesage_buf = new char[1000];
+        sprintf(error_mesage_buf, "node.cc, FatalException:%d %s, %s\n", message->GetLineNumber(), *error_mesage_utf8, *messageScriptNameUtf8);
+        OutputDebugStringA(error_mesage_buf);
+
+        v8::Local<v8::StackTrace> stackTrace = message->GetStackTrace();
+        if (!stackTrace.IsEmpty()) {
+            int frameCount = stackTrace->GetFrameCount();
+            for (int i = 0; i < frameCount; ++i) {
+                v8::Local<v8::StackFrame> stackFrame = stackTrace->GetFrame(i);
+
+                Local<String> scriptName = stackFrame->GetScriptNameOrSourceURL();
+                v8::String::Utf8Value scriptNameUtf8(scriptName);
+                sprintf(error_mesage_buf, "node.cc, FatalExceptionStackTrace:%d, %s\n", stackFrame->GetLineNumber(), *scriptNameUtf8);
+                OutputDebugStringA(error_mesage_buf);
+            }
+        }
+        delete[] error_mesage_buf;
 
 		Environment* env = Environment::GetCurrent(isolate);
 		Local<Object> process_object = env->process_object();
@@ -3212,7 +3244,11 @@ namespace node {
 			}
 
 			Isolate::Scope isolate_scope(isolate);
-			v8::Debug::ProcessDebugMessages(isolate);
+			v8::Debug::ProcessDebugMessages(
+#if !(V8_MAJOR_VERSION == 4 && V8_MINOR_VERSION == 8)
+                isolate
+#endif
+            );
 		}
 	}
 
@@ -3540,6 +3576,9 @@ namespace node {
 
 		Context::Scope context_scope(context);
 		Environment* env = Environment::New(context, loop);
+#ifndef MINIBLINK_NOT_IMPLEMENTED
+        env->InitBlinkMicrotaskSuppression();
+#endif
 
 		isolate->SetAutorunMicrotasks(false);
 

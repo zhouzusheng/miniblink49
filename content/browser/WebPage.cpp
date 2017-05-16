@@ -238,6 +238,13 @@ LRESULT WebPage::fireWheelEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
     return 0;
 }
 
+int WebPage::getCursorInfoType() const
+{
+    if (m_pageImpl)
+        return m_pageImpl->getCursorInfoType();
+    return -1;
+}
+
 IntSize WebPage::viewportSize() const
 { 
     if (m_pageImpl)
@@ -398,6 +405,14 @@ void WebPage::didCommitProvisionalLoad(blink::WebLocalFrame* frame, const blink:
 {
     if (m_pageImpl)
         m_pageImpl->didCommitProvisionalLoad(frame, history, type);
+}
+
+WebPage* WebPage::getSelfForCurrentContext()
+{
+    WebPageImpl* impl = WebPageImpl::getSelfForCurrentContext();
+    if (!impl)
+        return nullptr;
+    return impl->m_pagePtr;
 }
 
 WebViewImpl* WebPage::webViewImpl()

@@ -5,52 +5,52 @@
 #ifndef ATOM_BROWSER_WINDOW_LIST_H_
 #define ATOM_BROWSER_WINDOW_LIST_H_
 
+#include "browser/api/WindowInterface.h"
 #include <vector>
 
 namespace atom {
-    class Window;
+
 class WindowList {
- public:
-  typedef std::vector<Window*> WindowVector;
-  typedef WindowVector::iterator iterator;
-  typedef WindowVector::const_iterator const_iterator;
+public:
+    typedef std::vector<WindowInterface*> WindowVector;
+    typedef WindowVector::iterator iterator;
+    typedef WindowVector::const_iterator const_iterator;
 
-  // Windows are added to the list before they have constructed windows,
-  // so the |window()| member function may return NULL.
-  const_iterator begin() const { return windows_.begin(); }
-  const_iterator end() const { return windows_.end(); }
+    // Windows are added to the list before they have constructed windows,
+    // so the |window()| member function may return NULL.
+    const_iterator begin() const { return m_windows.begin(); }
+    const_iterator end() const { return m_windows.end(); }
 
-  iterator begin() { return windows_.begin(); }
-  iterator end() { return windows_.end(); }
+    iterator begin() { return m_windows.begin(); }
+    iterator end() { return m_windows.end(); }
 
-  bool empty() const { return windows_.empty(); }
-  size_t size() const { return windows_.size(); }
+    bool empty() const { return m_windows.empty(); }
+    size_t size() const { return m_windows.size(); }
 
-  Window* get(size_t index) const { return windows_[index]; }
+    WindowInterface* get(size_t index) const { return m_windows[index]; }
 
-  static WindowList* GetInstance();
+    WindowInterface* find(int id) const;
 
-  // Adds or removes |window| from the list it is associated with.
-  static void AddWindow(Window* window);
-  static void RemoveWindow(Window* window);
+    static WindowList* getInstance();
 
-  // Called by window when a close is cancelled by beforeunload handler.
-  static void WindowCloseCancelled(Window* window);
+    // Adds or removes |window| from the list it is associated with.
+    static void addWindow(WindowInterface* window);
+    static void removeWindow(WindowInterface* window);
 
+    // Called by window when a close is cancelled by beforeunload handler.
+    static void WindowCloseCancelled(WindowInterface* window);
 
-  // Closes all windows.
-  static void CloseAllWindows();
+    // Closes all windows.
+    static void closeAllWindows();
 
- private:
-  WindowList();
-  ~WindowList();
+private:
+    WindowList();
+    ~WindowList();
 
-  // A vector of the windows in this list, in the order they were added.
-  WindowVector windows_;
+    // A vector of the windows in this list, in the order they were added.
+    WindowVector m_windows;
 
-
-  static WindowList* instance_;
-
+    static WindowList* m_instance;
 };
 
 }  // namespace atom

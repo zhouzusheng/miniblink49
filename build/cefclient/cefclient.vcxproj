@@ -124,6 +124,8 @@
       <PreprocessorDefinitions>USING_CEF_SHARED;WIN32;_DEBUG;_WINDOWS;ENABLE_CEF=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>../../cef;../../cef/tests</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <MinimalRebuild>false</MinimalRebuild>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -148,7 +150,12 @@
       <AdditionalIncludeDirectories>../../cef;../../cef/tests</AdditionalIncludeDirectories>
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+<<<<<<< HEAD
       <DisableSpecificWarnings>4800;4291;4996;4244;4305;4577;4530;4595;4049;4267</DisableSpecificWarnings>
+=======
+      <DisableSpecificWarnings>4530</DisableSpecificWarnings>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+>>>>>>> weolar/master
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

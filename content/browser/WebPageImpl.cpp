@@ -115,6 +115,7 @@ namespace content {
 		m_needsCommit = 0;
 		m_commitCount = 0;
 		m_needsLayout = 1;
+		m_layerDirty = 1;
 		m_lastFrameTimeMonotonic = 0;
 		m_popupHandle = nullptr;
 		m_postCloseWidgetSoonMessage = false;
@@ -519,7 +520,7 @@ namespace content {
 
 	void WebPageImpl::setNeedsCommit()
 	{
-		atomicIncrement(&m_needsLayout);
+		InterlockedExchange(reinterpret_cast<long volatile*>(&m_needsLayout), 1);
 		setNeedsCommitAndNotLayout();
 	}
 
@@ -530,6 +531,17 @@ namespace content {
 		if (m_browser)
 			m_browser->ClearNeedHeartbeat();
 #endif
+	}
+
+	void WebPageImpl::onLayerTreeDirty()
+	{
+		InterlockedExchange(reinterpret_cast<long volatile*>(&m_layerDirty), 1);
+		setNeedsCommitAndNotLayout();
+	}
+
+	void WebPageImpl::didUpdateLayout()
+	{
+		onLayerTreeDirty();
 	}
 
 	void WebPageImpl::beginMainFrame()
@@ -547,22 +559,26 @@ namespace content {
 	void WebPageImpl::executeMainFrame()
 	{
 		freeV8TempObejctOnOneFrameBefore();
-
 		clearNeedsCommit();
 
 		double lastFrameTimeMonotonic = WTF::monotonicallyIncreasingTime();
 
-		m_layerTreeHost->beginRecordActions();
+		int layerDirty = InterlockedExchange(reinterpret_cast<long volatile*>(&m_layerDirty), 0);
+		int needsLayout = InterlockedExchange(reinterpret_cast<long volatile*>(&m_needsLayout), 0);
+		if (needsLayout) {
+			m_layerTreeHost->beginRecordActions();
 
-		if (m_needsLayout) {
-			atomicDecrement(&m_needsLayout);
 			WebBeginFrameArgs frameArgs(lastFrameTimeMonotonic, 0, lastFrameTimeMonotonic - m_lastFrameTimeMonotonic);
 			m_webViewImpl->beginFrame(frameArgs);
 			m_webViewImpl->layout();
+
+			if (layerDirty)
+				m_layerTreeHost->recordDraw();
+			m_layerTreeHost->endRecordActions();
 		}
 
-		m_layerTreeHost->recordDraw();
-		m_layerTreeHost->endRecordActions();
+		//     String out = String::format("WebPageImpl::executeMainFrame: %f\n", (float)(lastFrameTimeMonotonic - m_lastFrameTimeMonotonic));
+		//     OutputDebugStringA(out.utf8().data());
 
 		m_lastFrameTimeMonotonic = lastFrameTimeMonotonic;
 
@@ -825,7 +841,7 @@ namespace content {
 
 	void WebPageImpl::scheduleAnimation()
 	{
-		setNeedsCommit();
+		setNeedsCommit/*AndNotLayout*/();
 	}
 
 	void WebPageImpl::initializeLayerTreeView()
@@ -847,7 +863,11 @@ namespace content {
 			::PostMessage(m_hWnd, WM_SETCURSOR, 0, 0);
 	}
 
-<<<<<<< HEAD
+	int WebPageImpl::getCursorInfoType() const
+	{
+		return (int)m_cursorType;
+	}
+
 	void WebPageImpl::fireCursorEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, BOOL* handle)
 	{
 		CHECK_FOR_REENTER0();
@@ -896,68 +916,6 @@ namespace content {
 			hCur = ::LoadCursor(NULL, IDC_SIZEALL);
 			break;
 		}
-=======
-int WebPageImpl::getCursorInfoType() const
-{
-    return (int)m_cursorType;
-}
-
-void WebPageImpl::fireCursorEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, BOOL* handle)
-{
-    CHECK_FOR_REENTER0();
-    freeV8TempObejctOnOneFrameBefore();
-
-    if (handle)
-        *handle = FALSE;
-    HCURSOR hCur = NULL;
-    switch (m_cursorType) {
-    case WebCursorInfo::TypeIBeam:
-        hCur = ::LoadCursor(NULL, IDC_IBEAM);
-        break;
-    case WebCursorInfo::TypeHand:
-        hCur = ::LoadCursor(NULL, IDC_HAND);
-        break;
-    case WebCursorInfo::TypeWait:
-        hCur = ::LoadCursor(NULL, IDC_WAIT);
-        break;
-    case WebCursorInfo::TypeHelp:
-        hCur = ::LoadCursor(NULL, IDC_HELP);
-        break;
-    case WebCursorInfo::TypeEastResize:
-        hCur = ::LoadCursor(NULL, IDC_SIZEWE);
-        break;
-    case WebCursorInfo::TypeNorthResize:
-        hCur = ::LoadCursor(NULL, IDC_SIZENS);
-        break;
-    case WebCursorInfo::TypeSouthWestResize:
-    case WebCursorInfo::TypeNorthEastResize:
-        hCur = ::LoadCursor(NULL, IDC_SIZENESW);
-        break;
-    case WebCursorInfo::TypeSouthResize:
-    case WebCursorInfo::TypeNorthSouthResize:
-        hCur = ::LoadCursor(NULL, IDC_SIZENS);
-        break;
-    case WebCursorInfo::TypeNorthWestResize:
-    case WebCursorInfo::TypeSouthEastResize:
-        hCur = ::LoadCursor(NULL, IDC_SIZENWSE);
-        break;
-    case WebCursorInfo::TypeWestResize:
-    case WebCursorInfo::TypeEastWestResize:
-        hCur = ::LoadCursor(NULL, IDC_SIZEWE);
-        break;
-    case WebCursorInfo::TypeNorthEastSouthWestResize:
-    case WebCursorInfo::TypeNorthWestSouthEastResize:
-        hCur = ::LoadCursor(NULL, IDC_SIZEALL);
-        break;
-    }
-
-    if (hCur) {
-        ::SetCursor(hCur);
-        if (handle)
-            *handle = TRUE;
-    }
-}
->>>>>>> weolar/master
 
 		if (hCur) {
 			::SetCursor(hCur);
@@ -1259,18 +1217,18 @@ void WebPageImpl::fireCursorEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM
 		webFrame->loadHTMLString(html, baseURL, unreachableURL, replace);
 	}
 
-WebPageImpl* WebPageImpl::getSelfForCurrentContext()
-{
-    blink::WebLocalFrame* frame = blink::WebLocalFrame::frameForCurrentContext();
-    if (!frame)
-        return nullptr;
-    blink::WebViewImpl* impl = (blink::WebViewImpl*)frame->view();
-    if (!impl)
-        return nullptr;
+	WebPageImpl* WebPageImpl::getSelfForCurrentContext()
+	{
+		blink::WebLocalFrame* frame = blink::WebLocalFrame::frameForCurrentContext();
+		if (!frame)
+			return nullptr;
+		blink::WebViewImpl* impl = (blink::WebViewImpl*)frame->view();
+		if (!impl)
+			return nullptr;
 
-    content::WebPageImpl* page = (content::WebPageImpl*)impl->client();
-    return page;
-}
+		content::WebPageImpl* page = (content::WebPageImpl*)impl->client();
+		return page;
+	}
 
 #if (defined ENABLE_CEF) && (ENABLE_CEF == 1)
 	CefBrowserHostImpl* WebPageImpl::browser() const

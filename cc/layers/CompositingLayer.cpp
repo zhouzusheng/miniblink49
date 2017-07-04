@@ -226,9 +226,9 @@ void CompositingLayer::updataTile(int newIndexNumX, int newIndexNumY)
     }
 
     delete m_tiles;
-	m_tiles = newTiles;
-	m_numTileX = newIndexNumX;
-	m_numTileY = newIndexNumY;
+    m_tiles = newTiles;
+    m_numTileX = newIndexNumX;
+    m_numTileY = newIndexNumY;
 
 // 	String outString = String::format("CompositingLayer::updataTile: %d \n", m_id);
 // 	OutputDebugStringW(outString.charactersWithNullTermination().data());
@@ -284,7 +284,10 @@ void CompositingLayer::blendToTile(CompositingTile* tile, const SkBitmap& bitmap
     if (!postion.intersects(dirtyRect)) {
 //         if (postion.width() == 1 && postion.height() == 1 && dirtyRect.width() == 1 && dirtyRect.height() == 1)
 //             return;
-        DebugBreak();
+        postion.setWidth(kDefaultTileWidth);
+        postion.setHeight(kDefaultTileHeight);
+        if (!postion.intersects(dirtyRect)) 
+            DebugBreak();
         return;
     }
 

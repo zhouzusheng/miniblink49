@@ -9,7 +9,7 @@
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebTraceLocation.h"
 #include "third_party/WebKit/Source/wtf/ThreadSafeRefCounted.h"
-#include "cef/include/base/cef_lock.h"
+//#include "cef/include/base/cef_lock.h"
 #include <algorithm>
 #include <deque>
 
@@ -49,6 +49,57 @@ private:
 };
 
 }  // namespace
+
+class Lock {
+public:
+    Lock() {
+        ::InitializeCriticalSectionAndSpinCount(&lock_, 2000);
+    }
+    ~Lock() {}
+    void Acquire() { ::EnterCriticalSection(&lock_); }
+    void Release() { ::LeaveCriticalSection(&lock_); }
+
+    // If the lock is not held, take it and return true. If the lock is already
+    // held by another thread, immediately return false. This must not be called
+    // by a thread already holding the lock (what happens is undefined and an
+    // assertion may fail).
+    bool Try() {
+        if (::TryEnterCriticalSection(&lock_) != FALSE) {
+            return true;
+        }
+        return false;
+    }
+
+    // Null implementation if not debug.
+    void AssertAcquired() const {}
+
+private:
+    // Platform specific underlying lock implementation.
+    CRITICAL_SECTION lock_;
+
+    DISALLOW_COPY_AND_ASSIGN(Lock);
+};
+class AutoLock {
+public:
+    struct AlreadyAcquired {};
+
+    explicit AutoLock(Lock& lock) : lock_(lock) {
+        lock_.Acquire();
+    }
+
+    AutoLock(Lock& lock, const AlreadyAcquired&) : lock_(lock) {
+        lock_.AssertAcquired();
+    }
+
+    ~AutoLock() {
+        lock_.AssertAcquired();
+        lock_.Release();
+    }
+
+private:
+    Lock& lock_;
+    DISALLOW_COPY_AND_ASSIGN(AutoLock);
+};
 
 using Result = blink::WebDataConsumerHandle::Result;
 
@@ -215,7 +266,7 @@ public:
         m_isTwoPhaseReadInProgress = b;
     }
     // Can be called with |m_lock| not aquired.
-    base::Lock& lock() { return m_lock; }
+    Lock& lock() { return m_lock; }
 
 private:
     // Must be called with |m_lock| not aquired.
@@ -223,7 +274,7 @@ private:
     {
         blink::WebThread* runner;
         {
-            base::AutoLock lock(m_lock);
+            AutoLock lock(m_lock);
             runner = m_notificationTaskRunner;
         }
         if (!runner)
@@ -259,21 +310,21 @@ private:
     // Must be called with |m_lock| not aquired.
     void resetOnReaderDetachedWithLock()
     {
-        base::AutoLock lock(m_lock);
+        AutoLock lock(m_lock);
         resetOnReaderDetached();
     }
 
     friend class WTF::ThreadSafeRefCounted<Context>;
     ~Context()
     {
-        base::AutoLock lock(m_lock);
+        AutoLock lock(m_lock);
         ASSERT(!m_onReaderDetached);
 
         // This is necessary because the queue stores raw pointers.
         clear();
     }
 
-    base::Lock m_lock;
+    Lock m_lock;
     // |m_result| stores the ultimate state of this handle if it has. Otherwise, |Ok| is set.
     Result m_result;
     // TODO(yhirano): Use std::deque<PassOwnPtr<ThreadSafeReceivedData>> once it is allowed.
@@ -302,7 +353,7 @@ SharedMemoryDataConsumerHandle::Writer::Writer(const PassRefPtr<Context>& contex
 SharedMemoryDataConsumerHandle::Writer::~Writer()
 {
     close();
-    base::AutoLock lock(m_context->lock());
+    AutoLock lock(m_context->lock());
     m_context->resetOnReaderDetached();
 }
 
@@ -315,7 +366,7 @@ void SharedMemoryDataConsumerHandle::Writer::addData(PassOwnPtr<RequestPeer::Rec
 
     bool needsNotification = false;
     {
-        base::AutoLock lock(m_context->lock());
+        AutoLock lock(m_context->lock());
         if (!m_context->isHandleActive() && !m_context->isHandleLocked()) {
             // No one is interested in the data.
             return;
@@ -341,7 +392,7 @@ void SharedMemoryDataConsumerHandle::Writer::addData(PassOwnPtr<RequestPeer::Rec
 
 void SharedMemoryDataConsumerHandle::Writer::close()
 {
-    base::AutoLock lock(m_context->lock());
+    AutoLock lock(m_context->lock());
     if (m_context->result() == Ok) {
         m_context->setResult(Done);
         m_context->resetOnReaderDetached();
@@ -355,7 +406,7 @@ void SharedMemoryDataConsumerHandle::Writer::close()
 
 void SharedMemoryDataConsumerHandle::Writer::fail()
 {
-    base::AutoLock lock(m_context->lock());
+    AutoLock lock(m_context->lock());
     if (m_context->result() == Ok) {
         // TODO(yhirano): Use an appropriate error code other than
         // UnexpectedError.
@@ -378,21 +429,21 @@ void SharedMemoryDataConsumerHandle::Writer::fail()
 SharedMemoryDataConsumerHandle::ReaderImpl::ReaderImpl(PassRefPtr<Context> context, Client* client)
     : m_context(context)
 {
-    base::AutoLock lock(m_context->lock());
+    AutoLock lock(m_context->lock());
     RELEASE_ASSERT(!m_context->isHandleLocked());
     m_context->acquireReaderLock(client);
 }
 
 SharedMemoryDataConsumerHandle::ReaderImpl::~ReaderImpl()
 {
-    base::AutoLock lock(m_context->lock());
+    AutoLock lock(m_context->lock());
     m_context->releaseReaderLock();
     m_context->clearIfNecessary();
 }
 
 Result SharedMemoryDataConsumerHandle::ReaderImpl::read(void* data, size_t size, Flags flags, size_t* readSizeToReturn)
 {
-    base::AutoLock lock(m_context->lock());
+    AutoLock lock(m_context->lock());
 
     size_t totalReadSize = 0;
     *readSizeToReturn = 0;
@@ -427,7 +478,7 @@ Result SharedMemoryDataConsumerHandle::ReaderImpl::beginRead(const void** buffer
     *buffer = nullptr;
     *available = 0;
 
-    base::AutoLock lock(m_context->lock());
+    AutoLock lock(m_context->lock());
 
     if (m_context->result() == Ok && m_context->isTwoPhaseReadInProgress())
         m_context->setResult(UnexpectedError);
@@ -448,7 +499,7 @@ Result SharedMemoryDataConsumerHandle::ReaderImpl::beginRead(const void** buffer
 
 Result SharedMemoryDataConsumerHandle::ReaderImpl::endRead(size_t read_size)
 {
-    base::AutoLock lock(m_context->lock());
+    AutoLock lock(m_context->lock());
 
     if (!m_context->isTwoPhaseReadInProgress())
         return UnexpectedError;
@@ -477,7 +528,7 @@ SharedMemoryDataConsumerHandle::SharedMemoryDataConsumerHandle(BackpressureMode 
 
 SharedMemoryDataConsumerHandle::~SharedMemoryDataConsumerHandle()
 {
-    base::AutoLock lock(m_context->lock());
+    AutoLock lock(m_context->lock());
     m_context->setIsHandleActive(false);
     m_context->clearIfNecessary();
 }

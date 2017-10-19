@@ -32,7 +32,7 @@
       <UniqueIdentifier>{012b5879-56ff-44a6-b29f-e19e795c2829}</UniqueIdentifier>
     </Filter>
     <Filter Include="modules\fetch">
-      <UniqueIdentifier>{d639571f-10ff-4cac-9f6b-641c247fe25d}</UniqueIdentifier>
+      <UniqueIdentifier>{2d3cba34-d3b3-44e8-99d2-9ea6f564c8ed}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

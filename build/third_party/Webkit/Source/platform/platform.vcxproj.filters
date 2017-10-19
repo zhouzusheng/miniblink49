@@ -1228,9 +1228,6 @@
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebMediaDeviceInfo.cpp">
       <Filter>platform\exported</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebMemoryAllocatorDump.cpp">
-      <Filter>platform\exported</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebMessagePortChannelClient.cpp">
       <Filter>platform\exported</Filter>
     </ClCompile>
@@ -2719,9 +2716,6 @@
       <Filter>platform\image-decoders\GDIPlus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\..\third_party\WebKit\Source\config.h" />
-    <ClInclude Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebScrollbarThemeClientImpl.h">
-      <Filter>platform\exported</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebSpeechSynthesizerClientImpl.h">
       <Filter>platform\exported</Filter>
     </ClInclude>

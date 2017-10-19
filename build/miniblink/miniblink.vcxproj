@@ -217,6 +217,7 @@
       <AdditionalOptions>/Zc:threadSafeInit- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -307,8 +308,6 @@
     <ClCompile Include="..\..\cc\trees\ActionsFrameGroup.cpp" />
     <ClCompile Include="..\..\cc\trees\LayerSorter.cc" />
     <ClCompile Include="..\..\cc\trees\LayerTreeHost.cpp" />
-    <ClCompile Include="..\..\cef\libcef_dll\base\cef_lock.cc" />
-    <ClCompile Include="..\..\cef\libcef_dll\base\cef_lock_impl.cc" />
     <ClCompile Include="..\..\content\browser\CheckReEnter.cpp" />
     <ClCompile Include="..\..\content\browser\NavigationController.cpp" />
     <ClCompile Include="..\..\content\browser\PlatformEventHandler.cpp" />
@@ -1693,7 +1692,6 @@
     <ClInclude Include="..\..\net\MultipartHandle.h" />
     <ClInclude Include="..\..\net\PathWalker.h" />
     <ClInclude Include="..\..\net\RequestExtraData.h" />
-    <ClInclude Include="..\..\net\RequestPeer.h" />
     <ClInclude Include="..\..\net\SharedMemoryDataConsumerHandle.h" />
     <ClInclude Include="..\..\net\StreamReader.h" />
     <ClInclude Include="..\..\net\websocket\SocketStreamError.h" />

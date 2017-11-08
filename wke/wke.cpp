@@ -28,6 +28,7 @@ bool g_navigationToNewWindowEnable = true;
 //////////////////////////////////////////////////////////////////////////
 static std::string* s_versionString = nullptr;
 static bool wkeIsInit = false;
+bool g_wkeMemoryCacheEnable = true;
 
 bool wkeIsUpdataInOtherThread = false;
 
@@ -39,7 +40,7 @@ void wkeInitialize()
     //double-precision float
     _controlfp(_PC_53, _MCW_PC);
 
-    OleInitialize(NULL);
+    CoInitialize(NULL);
 
     content::WebPage::initBlink();
     wkeIsInit = true;
@@ -126,11 +127,16 @@ void wkeFinalize()
 //     WebCore::iconDatabase().close();
 //     WebCore::PageGroup::closeLocalStorage();
 
-    OleUninitialize();
+    CoUninitialize();
 
     if (s_versionString)
         delete s_versionString;
     s_versionString = nullptr;
+}
+
+void wkeSetMemoryCacheEnable(wkeWebView webView, bool b)
+{
+    g_wkeMemoryCacheEnable = b;
 }
 
 void wkeSetNavigationToNewWindowEnable(wkeWebView webView, bool b)
@@ -961,6 +967,11 @@ bool wkeIsLoadFailed(wkeWebView webView)
 bool wkeIsLoadComplete(wkeWebView webView)
 {
     return wkeIsLoadingCompleted(webView);
+}
+
+const utf8* wkeGetSource(wkeWebView webView)
+{
+    return nullptr;
 }
 
 const utf8* wkeTitle(wkeWebView webView)

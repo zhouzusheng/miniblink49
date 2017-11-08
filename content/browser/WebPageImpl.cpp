@@ -70,6 +70,8 @@
 extern bool wkeIsUpdataInOtherThread;
 #endif
 
+#include "content/browser/ToolTip.h"
+
 using namespace blink;
 
 namespace blink {
@@ -123,6 +125,9 @@ WebPageImpl::WebPageImpl()
     m_memoryCanvasForUi = nullptr;
     m_disablePaint = false;
     m_webFrameClient = new content::WebFrameClientImpl();
+
+    m_toolTip = new ToolTip();
+    m_toolTip->init();
     
     WebLocalFrameImpl* webLocalFrameImpl = (WebLocalFrameImpl*)WebLocalFrame::create(WebTreeScopeType::Document, m_webFrameClient);
     m_webViewImpl = WebViewImpl::create(this);
@@ -151,6 +156,8 @@ WebPageImpl::~WebPageImpl()
     ASSERT(pageDestroyed == m_state);
     m_state = pageDestroyed;
 
+    delete m_toolTip;
+
     if (m_memoryCanvasForUi)
         delete m_memoryCanvasForUi;
     m_memoryCanvasForUi = nullptr;
@@ -171,6 +178,9 @@ WebPageImpl::~WebPageImpl()
 
     m_pagePtr = 0;
     m_popupHandle = nullptr;
+
+    BlinkPlatformImpl* platform = (BlinkPlatformImpl*)blink::Platform::current();
+    platform->startGarbageCollectedThread(0);
 }
 
 bool WebPageImpl::checkForRepeatEnter()
@@ -667,7 +677,8 @@ HDC WebPageImpl::viewDC()
     skia::BitmapPlatformDevice* device = (skia::BitmapPlatformDevice*)skia::GetPlatformDevice(skia::GetTopDevice(*m_memoryCanvasForUi));
     if (!device)
         return nullptr;
-    return device->GetBitmapDCUgly();
+    HDC hDC = device->GetBitmapDCUgly();
+    return hDC;
 }
 
 void WebPageImpl::copyToMemoryCanvasForUi()
@@ -1280,6 +1291,11 @@ WebScreenInfo WebPageImpl::screenInfo()
     info.availableRect = WebRect(winRectToIntRect(mi.rcWork));
 
     return info;
+}
+
+void WebPageImpl::setToolTipText(const blink::WebString& toolTip, blink::WebTextDirection hint)
+{
+    m_toolTip->show(WTF::ensureUTF16UChar((String)toolTip, true).data());
 }
 
 WebWidget* WebPageImpl::createPopupMenu(WebPopupType type)

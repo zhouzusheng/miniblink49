@@ -39,7 +39,7 @@ void wkeInitialize()
     //double-precision float
     _controlfp(_PC_53, _MCW_PC);
 
-    CoInitialize(NULL);
+    OleInitialize(NULL);
 
     content::WebPage::initBlink();
     wkeIsInit = true;
@@ -126,7 +126,7 @@ void wkeFinalize()
 //     WebCore::iconDatabase().close();
 //     WebCore::PageGroup::closeLocalStorage();
 
-    CoUninitialize();
+    OleUninitialize();
 
     if (s_versionString)
         delete s_versionString;

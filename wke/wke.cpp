@@ -19,7 +19,9 @@
 namespace net {
 
 void setCookieJarPath(const WCHAR* path);
+void setCookieJarFullPath(const WCHAR* path);
 bool g_cspCheckEnable = true;
+bool g_navigationToNewWindowEnable = true;
 
 }
 
@@ -131,6 +133,11 @@ void wkeFinalize()
     s_versionString = nullptr;
 }
 
+void wkeSetNavigationToNewWindowEnable(wkeWebView webView, bool b)
+{
+    net::g_navigationToNewWindowEnable = b;
+}
+
 void wkeSeCspCheckEnable(wkeWebView webView, bool b)
 {
     net::g_cspCheckEnable = b;
@@ -200,7 +207,7 @@ void wkeSetHandle(wkeWebView webView, HWND wnd)
 
 void wkeSetHandleOffset(wkeWebView webView, int x, int y)
 {
-	webView->setHandleOffset(x, y);
+    webView->setHandleOffset(x, y);
 }
 
 bool wkeIsTransparent(wkeWebView webView)
@@ -225,7 +232,7 @@ void wkeSetUserAgentW(wkeWebView webView, const wchar_t* userAgent)
 
 void wkePostURL(wkeWebView wkeView,const utf8 * url,const char *szPostData,int nLen)
 {
-	wkeView->loadPostURL(url,szPostData,nLen);
+    wkeView->loadPostURL(url,szPostData,nLen);
 }
 
 void wkePostURLW(wkeWebView wkeView,const wchar_t * url,const char *szPostData,int nLen)
@@ -473,6 +480,11 @@ void wkeSetCookieJarPath(wkeWebView webView, const WCHAR* path)
     net::setCookieJarPath(path);
 }
 
+void wkeSetCookieJarFullPath(wkeWebView webView, const WCHAR* path)
+{
+    net::setCookieJarFullPath(path);
+}
+
 void wkeSetMediaVolume(wkeWebView webView, float volume)
 {
     webView->setMediaVolume(volume);
@@ -520,11 +532,15 @@ bool wkeFireWindowsMessage(wkeWebView webView, HWND hWnd, UINT message, WPARAM w
 
 void wkeSetFocus(wkeWebView webView)
 {
+    if (!webView)
+        return;
     webView->setFocus();
 }
 
 void wkeKillFocus(wkeWebView webView)
 {
+    if (!webView)
+        return;
     webView->killFocus();
 }
 
@@ -626,6 +642,11 @@ void wkeOnCreateView(wkeWebView webView, wkeCreateViewCallback callback, void* p
 void wkeOnDocumentReady(wkeWebView webView, wkeDocumentReadyCallback callback, void* param)
 {
     webView->onDocumentReady(callback, param);
+}
+
+void wkeOnDocumentReady2(wkeWebView webView, wkeDocumentReady2Callback callback, void* param)
+{
+    webView->onDocumentReady2(callback, param);
 }
 
 void wkeOnLoadingFinish(wkeWebView webView, wkeLoadingFinishCallback callback, void* param)
@@ -760,22 +781,22 @@ wkeWebView wkeGetWebViewForCurrentContext()
     return webview;
 }
 
-WKE_API void wkeSetUserKayValue(wkeWebView webView, const char* key, void* value)
+void wkeSetUserKayValue(wkeWebView webView, const char* key, void* value)
 {
     webView->setUserKayValue(key, value);
 }
 
-WKE_API void* wkeGetUserKayValue(wkeWebView webView, const char* key)
+void* wkeGetUserKayValue(wkeWebView webView, const char* key)
 {
     return webView->getUserKayValue(key);
 }
 
-WKE_API int wkeGetCursorInfoType(wkeWebView webView)
+int wkeGetCursorInfoType(wkeWebView webView)
 {
     return webView->getCursorInfoType();
 }
 
-WKE_API void wkeSetDragFiles(wkeWebView webView, const POINT* clintPos, const POINT* screenPos, wkeString files[], int filesCount)
+void wkeSetDragFiles(wkeWebView webView, const POINT* clintPos, const POINT* screenPos, wkeString files[], int filesCount)
 {
     webView->setDragFiles(clintPos, screenPos, files, filesCount);
 }

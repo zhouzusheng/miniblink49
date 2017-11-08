@@ -53,6 +53,7 @@
 #include "content/web_impl_win/npapi/PluginDatabase.h"
 
 #include "cc/trees/LayerTreeHost.h"
+#include "cc/base/BdColor.h"
 
 #if (defined ENABLE_CEF) && (ENABLE_CEF == 1)
 #include "cef/libcef/browser/CefBrowserHostImpl.h"
@@ -128,9 +129,6 @@ WebPageImpl::WebPageImpl()
     m_webViewImpl->setMainFrame(webLocalFrameImpl);
     initSetting();
 
-    //m_frameLoaderClient = new FrameLoaderClientImpl(webLocalFrameImpl);
-    //m_frame->view()->setTransparent(m_useLayeredBuffer);
-
     m_platformEventHandler = new PlatformEventHandler(m_webViewImpl, m_webViewImpl);
 
     m_layerTreeHost->setWebGestureCurveTarget(m_webViewImpl);
@@ -143,9 +141,6 @@ WebPageImpl::WebPageImpl()
         CefRefPtr<CefRenderProcessHandler> handler = application->GetRenderProcessHandler();
         if (!handler.get())
             return;
-
-        //     CefRefPtr<CefListValue> extraInfo = CefListValue::Create();
-        //     handler->OnRenderThreadCreated(extraInfo);
         handler->OnWebKitInitialized();
     }
 #endif
@@ -344,8 +339,8 @@ void WebPageImpl::init(WebPage* pagePtr, HWND hWnd)
     m_hWnd = hWnd;
 
     LONG windowStyle = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
-    m_useLayeredBuffer = !!((windowStyle)& WS_EX_LAYERED);
-    m_layerTreeHost->setUseLayeredBuffer(m_useLayeredBuffer);
+    bool useLayeredBuffer = !!(windowStyle & WS_EX_LAYERED);
+    m_layerTreeHost->setHasTransparentBackground(useLayeredBuffer);
 
     m_pagePtr = pagePtr;
     m_webFrameClient->setWebPage(m_pagePtr);
@@ -410,9 +405,6 @@ void WebPageImpl::close()
 
 void WebPageImpl::doClose()
 {
-    for (size_t i = 0; i < m_destroyNotifs.size(); ++i)
-        m_destroyNotifs[i]->destroy();
-
     m_layerTreeHost->requestApplyActionsToRunIntoCompositeThread(false);
 #if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
     if (!m_pagePtr->wkeHandler().isWke) {
@@ -429,10 +421,11 @@ void WebPageImpl::doClose()
     content::WebThreadImpl* threadImpl = nullptr;
     threadImpl = (content::WebThreadImpl*)(blink::Platform::current()->currentThread());
 
-    //blink::V8GCController::collectGarbage(v8::Isolate::GetCurrent());
-    m_webViewImpl->mainFrameImpl()->close();
+    //m_webViewImpl->mainFrameImpl()->close();
     m_webViewImpl->close();
-    //v8::Isolate::GetCurrent()->CollectAllGarbage("WebPage close");
+
+    for (size_t i = 0; i < m_destroyNotifs.size(); ++i)
+        m_destroyNotifs[i]->destroy();
 
     m_state = pageDestroyed;
 }
@@ -663,9 +656,10 @@ void WebPageImpl::firePaintEvent(HDC hdc, const RECT* paintRect)
 
 HDC WebPageImpl::viewDC()
 {
+    bool useLayeredBuffer = m_layerTreeHost->getHasTransparentBackground();
     if (!m_memoryCanvasForUi && !m_viewportSize.isEmpty()) {
-        m_memoryCanvasForUi = skia::CreatePlatformCanvas(m_viewportSize.width(), m_viewportSize.height(), !m_useLayeredBuffer);
-        cc::LayerTreeHost::clearCanvas(m_memoryCanvasForUi, IntRect(0, 0, m_viewportSize.width(), m_viewportSize.height()), m_useLayeredBuffer);
+        m_memoryCanvasForUi = skia::CreatePlatformCanvas(m_viewportSize.width(), m_viewportSize.height(), !useLayeredBuffer);
+        cc::LayerTreeHost::clearCanvas(m_memoryCanvasForUi, IntRect(0, 0, m_viewportSize.width(), m_viewportSize.height()), useLayeredBuffer);
     }
     if (!m_memoryCanvasForUi)
         return nullptr;
@@ -678,20 +672,30 @@ HDC WebPageImpl::viewDC()
 
 void WebPageImpl::copyToMemoryCanvasForUi()
 {
+    bool useLayeredBuffer = m_layerTreeHost->getHasTransparentBackground();
+    if (m_hWnd) {
+        LONG windowStyle = GetWindowLongPtr(m_hWnd, GWL_EXSTYLE);
+        useLayeredBuffer = !!(windowStyle & WS_EX_LAYERED);
+        m_layerTreeHost->setHasTransparentBackground(useLayeredBuffer);
+    }
+
     SkCanvas* memoryCanvas = m_layerTreeHost->getMemoryCanvasLocked();
     if (!memoryCanvas) {
         m_layerTreeHost->releaseMemoryCanvasLocked();
         return;
     }
     
+    bool isCreatedThisTime = false;
     int width = memoryCanvas->imageInfo().width();
     int height = memoryCanvas->imageInfo().height();
     if (0 != width && 0 != height) {
-        if (/*!m_memoryCanvasForUi ||*/ (m_memoryCanvasForUi && (width != m_memoryCanvasForUi->imageInfo().width() || height != m_memoryCanvasForUi->imageInfo().height()))) {
+        if ((!m_memoryCanvasForUi && 0 != width * height) || 
+            (m_memoryCanvasForUi && (width != m_memoryCanvasForUi->imageInfo().width() || height != m_memoryCanvasForUi->imageInfo().height()))) {
             if (m_memoryCanvasForUi)
                 delete m_memoryCanvasForUi;
-            m_memoryCanvasForUi = skia::CreatePlatformCanvas(width, height, !m_useLayeredBuffer);
-            cc::LayerTreeHost::clearCanvas(m_memoryCanvasForUi, IntRect(0, 0, width, height), m_useLayeredBuffer);
+            m_memoryCanvasForUi = skia::CreatePlatformCanvas(width, height, !useLayeredBuffer);
+            cc::LayerTreeHost::clearCanvas(m_memoryCanvasForUi, IntRect(0, 0, width, height), useLayeredBuffer);
+            isCreatedThisTime = true;
         }
     } else if (m_memoryCanvasForUi) {
         delete m_memoryCanvasForUi;
@@ -703,11 +707,14 @@ void WebPageImpl::copyToMemoryCanvasForUi()
         return;
     }
 
-    HDC hMemoryDC = skia::BeginPlatformPaint(m_memoryCanvasForUi);
-    RECT srcRect = { 0, 0, memoryCanvas->imageInfo().width(), memoryCanvas->imageInfo().height() };
-    skia::DrawToNativeContext(memoryCanvas, hMemoryDC, 0, 0, &srcRect);
-    skia::EndPlatformPaint(m_memoryCanvasForUi);
+    if (useLayeredBuffer && !isCreatedThisTime)
+        cc::LayerTreeHost::clearCanvas(m_memoryCanvasForUi, IntRect(0, 0, width, height), useLayeredBuffer);
 
+    SkBaseDevice* device = skia::GetTopDevice(*memoryCanvas);
+    if (device) {
+        const SkBitmap& memoryCanvasBitmap = device->accessBitmap(false);
+        m_memoryCanvasForUi->drawBitmap(memoryCanvasBitmap, 0, 0, nullptr);
+    }
     m_layerTreeHost->releaseMemoryCanvasLocked();
 }
 
@@ -773,27 +780,24 @@ void WebPageImpl::paintToMemoryCanvasInUiThread(SkCanvas* canvas, const IntRect&
 
     drawDebugLine(canvas, paintRect);
 
-    if (m_useLayeredBuffer) { // 再把内存dc画到hdc上
-#if ENABLE_WKE != 1
-        RECT rtWnd;
-        ::GetWindowRect(m_pagePtr->getHWND(), &rtWnd);
-        //m_winodwRect = winRectToIntRect(rtWnd);
-        //skia::DrawToNativeLayeredContext(canvas.get(), hdc, m_winodwRect.x(), m_winodwRect.y(), &((RECT)m_clientRect));
-#endif
-    } else {
-        bool drawToScreen = false;
+    bool drawToScreen = false;
 #if ENABLE_CEF == 1
-        drawToScreen = !!m_browser;
+    drawToScreen = !!m_browser;
 #endif
-        if (drawToScreen) { // 使用wke接口不由此上屏
-            HDC hdc = GetDC(m_pagePtr->getHWND());
+    if (drawToScreen) { // 使用wke接口不由此上屏
+        HDC hdc = GetDC(m_pagePtr->getHWND());
+        if (m_layerTreeHost->getHasTransparentBackground()) {
+            RECT rtWnd;
+            ::GetWindowRect(m_pagePtr->getHWND(), &rtWnd);
+            IntRect winodwRect = winRectToIntRect(rtWnd);
+            skia::DrawToNativeLayeredContext(canvas, hdc, &intRectToWinRect(paintRect), &intRectToWinRect(paintRect));
+        } else
             skia::DrawToNativeContext(canvas, hdc, paintRect.x(), paintRect.y(), &intRectToWinRect(paintRect));
-            ::ReleaseDC(m_pagePtr->getHWND(), hdc);
-        } else {
-            copyToMemoryCanvasForUi();
-        }
+        ::ReleaseDC(m_pagePtr->getHWND(), hdc);
+    } else {
+        copyToMemoryCanvasForUi();
     }
-
+    
 #if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
     if (m_pagePtr->wkeHandler().paintUpdatedCallback) {
         m_pagePtr->wkeHandler().paintUpdatedCallback(
@@ -1179,6 +1183,14 @@ void WebPageImpl::loadHTMLString(int64 frameId, const WebData& html, const WebUR
     //AutoRecordActions autoRecordActions(this, m_layerTreeHost, false);
     webFrame->loadHTMLString(html, baseURL, unreachableURL, replace);
     m_webViewImpl->setFocus(true);
+}
+
+void WebPageImpl::setTransparent(bool transparent)
+{
+    m_layerTreeHost->setHasTransparentBackground(transparent);
+    m_layerTreeHost->setBackgroundColor(cc::getRealColor(transparent, cc::s_kBgColor));
+    m_webViewImpl->setIsTransparent(transparent);
+    m_webViewImpl->setBaseBackgroundColor(cc::getRealColor(transparent, cc::s_kBgColor));
 }
 
 WebPageImpl* WebPageImpl::getSelfForCurrentContext()

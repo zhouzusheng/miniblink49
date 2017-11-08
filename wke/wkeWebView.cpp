@@ -88,7 +88,10 @@ void CWebView::setTransparent(bool transparent)
     if (m_transparent == transparent)
         return;
 
-//     m_transparent = transparent;
+    m_transparent = transparent;
+
+    m_webPage->setTransparent(transparent);
+
 //     m_dirtyArea = blink::IntRect(0, 0, m_width, m_height);
 //     setDirty(true);
 // 
@@ -929,7 +932,6 @@ void CWebView::onURLChanged2(wkeURLChangedCallback2 callback, void* callbackPara
     m_webPage->wkeHandler().urlChangedCallback2Param = callbackParam;
 }
 
-
 void CWebView::onPaintUpdated(wkePaintUpdatedCallback callback, void* callbackParam)
 {
     m_webPage->wkeHandler().paintUpdatedCallback = callback;
@@ -1075,6 +1077,12 @@ void CWebView::onDocumentReady(wkeDocumentReadyCallback callback, void* callback
 {
     m_webPage->wkeHandler().documentReadyCallback = callback;
     m_webPage->wkeHandler().documentReadyCallbackParam = callbackParam;
+}
+
+void CWebView::onDocumentReady2(wkeDocumentReady2Callback callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().documentReady2Callback = callback;
+    m_webPage->wkeHandler().documentReady2CallbackParam = callbackParam;
 }
 
 void CWebView::onLoadUrlBegin(wkeLoadUrlBeginCallback callback, void* callbackParam)

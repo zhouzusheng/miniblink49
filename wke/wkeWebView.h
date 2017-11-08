@@ -6,6 +6,7 @@
 
 //cexer: 必须包含在后面，因为其中的 windows.h 会定义 max、min，导致 WebCore 内部的 max、min 出现错乱。
 #include "wke/wkeString.h"
+#include "wke/wkeJsBindFreeTempObject.h"
 #include "third_party/WebKit/Source/platform/geometry/IntRect.h"
 #include "net/WebURLLoaderManager.h"
 #include <map>
@@ -48,6 +49,9 @@ struct CWebViewHandler {
 
     wkeDocumentReadyCallback documentReadyCallback;
     void* documentReadyCallbackParam;
+
+    wkeDocumentReady2Callback documentReady2Callback;
+    void* documentReady2CallbackParam;
 
     wkeLoadingFinishCallback loadingFinishCallback;
     void* loadingFinishCallbackParam;
@@ -215,6 +219,7 @@ public:
 
     virtual void onLoadingFinish(wkeLoadingFinishCallback callback, void* callbackParam);
     virtual void onDocumentReady(wkeDocumentReadyCallback callback, void* callbackParam);
+    void onDocumentReady2(wkeDocumentReady2Callback callback, void* callbackParam);
     virtual void onDownload(wkeDownloadCallback callback, void* callbackParam);
     virtual void onConsole(wkeConsoleCallback callback, void* callbackParam);
     virtual void onCallUiThread(wkeCallUiThread callback, void* callbackParam);

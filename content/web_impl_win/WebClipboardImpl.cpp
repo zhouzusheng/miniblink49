@@ -701,7 +701,7 @@ void WebClipboardImpl::writeDataObject(const WebDragData& data)
             if (blink::mimeTypeTextPlain == stringType || blink::mimeTypeTextPlainEtc == stringType) {
                 writeText(it.stringData);
             } else if (blink::mimeTypeTextHTML == stringType) {
-                writeHTML(it.stringData, it.baseURL, WebString(), false);
+				writeHTMLInternal(it.stringData, it.baseURL, WebString(), false);
             }
         }
             

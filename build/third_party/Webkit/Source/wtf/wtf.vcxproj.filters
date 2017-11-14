@@ -214,6 +214,9 @@
       <Filter>wtf\text</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\config.cpp" />
+    <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\wtf\text\TextCodecWin.cpp">
+      <Filter>wtf\text</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\third_party\WebKit\Source\wtf\AddressSanitizer.h">
@@ -697,5 +700,8 @@
       <Filter>wtf\text</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\..\third_party\WebKit\Source\config.h" />
+    <ClInclude Include="..\..\..\..\..\third_party\WebKit\Source\wtf\text\TextCodecWin.h">
+      <Filter>wtf\text</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

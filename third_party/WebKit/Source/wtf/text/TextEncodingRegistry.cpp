@@ -36,13 +36,20 @@
 #include "wtf/StringExtras.h"
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/text/CString.h"
+ //add by zzs
+#ifdef USE_ICU
 #include "wtf/text/TextCodecICU.h"
+#else
+#include "wtf/text/TextCodecWin.h"
+#endif
+
 #include "wtf/text/TextCodecLatin1.h"
 #include "wtf/text/TextCodecReplacement.h"
 #include "wtf/text/TextCodecUTF16.h"
 #include "wtf/text/TextCodecUTF8.h"
 #include "wtf/text/TextCodecUserDefined.h"
 #include "wtf/text/TextEncoding.h"
+
 
 namespace WTF {
 
@@ -247,9 +254,15 @@ static void extendTextCodecMaps()
 {
     TextCodecReplacement::registerEncodingNames(addToTextEncodingNameMap);
     TextCodecReplacement::registerCodecs(addToTextCodecMap);
+#ifdef USE_ICU
+
 
     TextCodecICU::registerEncodingNames(addToTextEncodingNameMap);
     TextCodecICU::registerCodecs(addToTextCodecMap);
+#else
+	TextCodecWin::registerEncodingNames(addToTextEncodingNameMap);
+	TextCodecWin::registerCodecs(addToTextCodecMap);
+#endif // USE_ICU
 
     pruneBlacklistedCodecs();
 }

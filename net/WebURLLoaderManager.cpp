@@ -48,10 +48,12 @@
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
+#include "third_party/WebKit/public/platform/WebScheduler.h"
 #include "third_party/WebKit/Source/platform/weborigin/KURL.h"
 #include "third_party/WebKit/Source/platform/network/HTTPParsers.h"
 #include "third_party/WebKit/Source/platform/MIMETypeRegistry.h"
 #include "third_party/WebKit/Source/web/WebLocalFrameImpl.h"
+
 #include "content/web_impl_win/WebBlobRegistryImpl.h"
 #include "content/web_impl_win/WebCookieJarCurlImpl.h"
 #include "content/web_impl_win/BlinkPlatformImpl.h"
@@ -76,6 +78,9 @@
 #include "wtf/RefCountedLeakCounter.h"
 
 using namespace blink;
+
+extern WKE_FILE_OPEN g_pfnOpen;
+extern WKE_FILE_CLOSE g_pfnClose;
 
 namespace net {
 
@@ -461,6 +466,11 @@ void WebURLLoaderManager::handleDidFinishLoading(WebURLLoaderInternal* job, doub
         job->m_bodyStreamWriter = nullptr;
     }
 
+    KURL url = job->firstRequest()->url();
+
+//     String outString = String::format("handleDidFinishLoading:%s\n", WTF::ensureStringToUTF8(url.string(), true).data());
+//     OutputDebugStringW(outString.charactersWithNullTermination().data());
+
     setBlobDataLengthByTempPath(job);
     job->client()->didFinishLoading(job->loader(), finishTime, totalEncodedDataLength);
 }
@@ -472,6 +482,10 @@ void WebURLLoaderManager::handleDidFail(WebURLLoaderInternal* job, const blink::
         delete job->m_bodyStreamWriter;
         job->m_bodyStreamWriter = nullptr;
     }
+    KURL url = job->firstRequest()->url();
+
+//     String outString = String::format("handleDidFail on ui Thread:%d %s\n", error.reason, WTF::ensureStringToUTF8(url.string(), true).data());
+//     OutputDebugStringW(outString.charactersWithNullTermination().data());
 
     setBlobDataLengthByTempPath(job);
     job->client()->didFail(job->loader(), error);
@@ -684,7 +698,7 @@ public:
         if (job->m_isSynchronous)
             job->m_syncTasks.append(task);
         else
-            Platform::current()->mainThread()->postTask(FROM_HERE, task);
+            Platform::current()->mainThread()->scheduler()->postLoadingTask(FROM_HERE, task); // postLoadingTask
         return args;
     }
 
@@ -808,7 +822,8 @@ size_t WebURLLoaderManagerMainTask::handleHeaderCallbackOnMainThread(WebURLLoade
             RequestExtraData* requestExtraData = reinterpret_cast<RequestExtraData*>(job->firstRequest()->extraData());
             WebPage* page = requestExtraData->page;
             if (page->wkeHandler().downloadCallback) {
-                if (page->wkeHandler().downloadCallback(page->wkeWebView(), page->wkeHandler().downloadCallbackParam, encodeWithURLEscapeSequences(job->firstRequest()->url().string()).latin1().data())) {
+                Vector<char> urlBuf = WTF::ensureStringToUTF8(job->firstRequest()->url().string(), true);
+                if (page->wkeHandler().downloadCallback(page->wkeWebView(), page->wkeHandler().downloadCallbackParam, urlBuf.data())) {
                     blink::WebLocalFrame* frame = requestExtraData->frame;
                     frame->stopLoading();
                     return totalSize;
@@ -910,8 +925,9 @@ void WebURLLoaderManagerMainTask::handleHookRequestOnMainThread(WebURLLoaderInte
     RequestExtraData* requestExtraData = reinterpret_cast<RequestExtraData*>(job->firstRequest()->extraData());
     content::WebPage* page = requestExtraData->page;
     if (page->wkeHandler().loadUrlEndCallback) {
+        Vector<char> urlBuf = WTF::ensureStringToUTF8(job->firstRequest()->url().string(), true);
         page->wkeHandler().loadUrlEndCallback(page->wkeWebView(), page->wkeHandler().loadUrlEndCallbackParam,
-            encodeWithURLEscapeSequences(job->firstRequest()->url().string()).latin1().data(), job,
+            urlBuf.data(), job,
             job->m_hookBuf, job->m_hookLength);
     }
 }
@@ -1085,6 +1101,9 @@ bool WebURLLoaderManager::downloadOnIoThread()
                 args->resourceError->reason = msg->data.result;
                 args->resourceError->domain = WebString::fromLatin1(url);
                 args->resourceError->localizedDescription = WebString::fromLatin1(curl_easy_strerror(msg->data.result));
+
+                String outString = String::format("kDidFail on io Thread:%d, %s\n", msg->data.result, url);
+                OutputDebugStringW(outString.charactersWithNullTermination().data());
             }
         }
 
@@ -1134,7 +1153,7 @@ void WebURLLoaderManager::removeFromCurlOnIoThread(int jobId)
                 curl_easy_cleanup(job->m_handle);
             }
             job->m_handle = nullptr;
-            Platform::current()->mainThread()->postTask(FROM_HERE, task);
+            Platform::current()->mainThread()->scheduler()->postLoadingTask(FROM_HERE, task); // postLoadingTask
         }
     }
 }
@@ -1379,6 +1398,7 @@ public:
         if (!job || job->m_cancelled)
             return;
 
+        job->m_response.setURL(job->firstRequest()->url());
         job->client()->didReceiveResponse(job->loader(), job->m_response);
         if (job->m_asynWkeNetSetData && !job->m_cancelled) { // 可能在didReceiveResponse里被cancel
             WebURLLoaderManager::sharedInstance()->didReceiveDataOrDownload(job, static_cast<char*>(job->m_asynWkeNetSetData), job->m_asynWkeNetSetDataLength, 0);
@@ -1408,12 +1428,12 @@ public:
         job->m_isBlackList = true;
         job->m_response.setURL(job->firstRequest()->url());
         job->client()->didReceiveResponse(job->loader(), job->m_response);
-        if (job->m_asynWkeNetSetData && !job->m_cancelled) { // 可能在didReceiveResponse里被cancel
-            WebURLLoaderManager::sharedInstance()->didReceiveDataOrDownload(job, static_cast<char*>(""), 0, 0);
+        if (!job->m_cancelled) { // 可能在didReceiveResponse里被cancel
+            //WebURLLoaderManager::sharedInstance()->didReceiveDataOrDownload(job, static_cast<char*>(""), 0, 0);
 
             WebURLError error;
             error.domain = WebString(String(job->m_url));
-            error.reason = 0;
+            error.reason = -1;
             error.localizedDescription = WebString::fromUTF8("black list");
             WebURLLoaderManager::sharedInstance()->handleDidFail(job, error);
             RELEASE_ASSERT(job->m_cancelled);
@@ -1501,13 +1521,19 @@ void WebURLLoaderManager::removeLiveJobs(int jobId)
 
 bool isBlackListUrl(const String& url)
 {
-    if (false//WTF::kNotFound != url.find(".woff")
-        //|| WTF::kNotFound != url.find("doubleclick.net")
-        // || WTF::kNotFound != url.find("messaging.teambition.net")
-        ) {
-        return true;
+    char* blackList[] = {
+//         ".woff2",
+        nullptr
+    };
+
+    const char* blackFile = nullptr;
+    int i = 0;
+    for (blackFile = blackList[0]; blackFile; blackFile = blackList[i]) {
+        if (WTF::kNotFound != url.find(blackFile))
+            return true;
+        ++i;
     }
-    //
+
     return false;
 }
 
@@ -1538,6 +1564,35 @@ private:
     int m_jobId;
 };
 
+static bool isLocalFileNotExist(const char* urlTrim, WebURLLoaderInternal* job)
+{
+    // 有外部hook，则不走快速判断流程
+    if (g_pfnOpen)
+        return false;
+
+    RequestExtraData* requestExtraData = reinterpret_cast<RequestExtraData*>(job->firstRequest()->extraData());
+    if (!requestExtraData)
+        return false;
+
+    WebPage* page = requestExtraData->page;
+    if (!page->wkeHandler().loadUrlBeginCallback)
+        return false;
+
+    String url(urlTrim);
+    if (url.startsWith("file:///"))
+        url.remove(0, sizeof("file:///") - 1);
+    url.replace("/", "\\");
+
+    bool result = false;
+    Vector<UChar> buf = WTF::ensureUTF16UChar(url, true);
+    result = !::PathFileExistsW(buf.data());
+    if (result) {
+        String outString = String::format("isLocalFileNotExist: %s\n", WTF::ensureStringToUTF8(url, true).data());
+        OutputDebugStringW(outString.charactersWithNullTermination().data());
+    }
+    return result;
+}
+
 int WebURLLoaderManager::addAsynchronousJob(WebURLLoaderInternal* job)
 {
     ASSERT(WTF::isMainThread());
@@ -1557,14 +1612,14 @@ int WebURLLoaderManager::addAsynchronousJob(WebURLLoaderInternal* job)
     int jobId = 0;
     if (isBlackListUrl(url)) {
         jobId = addLiveJobs(job);
-        Platform::current()->currentThread()->postTask(FROM_HERE, new BlackListCancelTask(this, jobId));
+        Platform::current()->currentThread()->scheduler()->postLoadingTask(FROM_HERE, new BlackListCancelTask(this, jobId)); // postLoadingTask
         return jobId;
-    }    
+    }
 
     if (kurl.protocolIsData()) {
         jobId = addLiveJobs(job);
         job->m_isDataUrl = true;
-        Platform::current()->currentThread()->postTask(FROM_HERE, new HandleDataURLTask(this, jobId));
+        Platform::current()->currentThread()->scheduler()->postLoadingTask(FROM_HERE, new HandleDataURLTask(this, jobId)); // postLoadingTask
         return jobId;
     }
 
@@ -1573,7 +1628,7 @@ int WebURLLoaderManager::addAsynchronousJob(WebURLLoaderInternal* job)
         return 0;
 
     if (job->m_isWkeNetSetDataBeSetted) {
-        Platform::current()->currentThread()->postTask(FROM_HERE, new WkeAsynTask(this, jobId));
+        Platform::current()->currentThread()->scheduler()->postLoadingTask(FROM_HERE, new WkeAsynTask(this, jobId)); // postLoadingTask
         return jobId;
     }
 
@@ -1634,8 +1689,9 @@ void WebURLLoaderManager::dispatchSynchronousJob(WebURLLoaderInternal* job)
     RequestExtraData* requestExtraData = reinterpret_cast<RequestExtraData*>(job->firstRequest()->extraData());
     WebPage* page = requestExtraData->page;
     if (page->wkeHandler().loadUrlBeginCallback) {
+        Vector<char> url = WTF::ensureStringToUTF8(job->firstRequest()->url().string(), true);
         if (page->wkeHandler().loadUrlBeginCallback(page->wkeWebView(), page->wkeHandler().loadUrlBeginCallbackParam,
-            encodeWithURLEscapeSequences(job->firstRequest()->url().string()).latin1().data(), job)) {
+            url.data(), job)) {
             WebURLLoaderManager::sharedInstance()->handleDidFinishLoading(job, WTF::currentTime(), 0);
             delete job;
             return;
@@ -1699,9 +1755,10 @@ static bool dispatchWkeLoadUrlBegin(WebURLLoaderInternal* job)
     if (!page->wkeHandler().loadUrlBeginCallback)
         return false;
 
+    Vector<char> urlBuf = WTF::ensureStringToUTF8(job->firstRequest()->url().string(), true);
     if (!page->wkeHandler().loadUrlBeginCallback(page->wkeWebView(),
         page->wkeHandler().loadUrlBeginCallbackParam,
-        encodeWithURLEscapeSequences(job->firstRequest()->url().string()).latin1().data(), job))
+        urlBuf.data(), job))
         return false;
 
     return true;
@@ -1993,6 +2050,12 @@ int WebURLLoaderManager::initializeHandleOnMainThread(WebURLLoaderInternal* job)
     int jobId = addLiveJobs(job);
 
     InitializeHandleInfo* info = preInitializeHandleOnMainThread(job);
+    KURL kurl = job->firstRequest()->url();
+    if (kurl.isLocalFile() && isLocalFileNotExist(info->url.c_str(), job)) {
+        Platform::current()->currentThread()->scheduler()->postLoadingTask(FROM_HERE, new BlackListCancelTask(this, jobId));
+        return jobId;
+    }
+
     m_thread->postTask(FROM_HERE, WTF::bind(&WebURLLoaderManager::initializeHandleOnIoThread, this, jobId, info));
     m_thread->postTask(FROM_HERE, WTF::bind(&WebURLLoaderManager::startOnIoThread, this, jobId));
 

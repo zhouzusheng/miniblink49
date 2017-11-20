@@ -1134,9 +1134,6 @@
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\image-decoders\FastSharedBufferReader.cpp">
       <Filter>platform\image-decoders</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebContentDecryptionModuleResultEmpty.cpp">
-      <Filter>platform\exported</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\fonts\opentype\OpenTypeSanitizer.cpp">
       <Filter>platform\fonts\opentype</Filter>
     </ClCompile>
@@ -1300,6 +1297,7 @@
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebSpeechSynthesizerClientImpl.cpp">
       <Filter>platform\exported</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebMemoryAllocatorDump.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\third_party\WebKit\Source\platform\animation\AnimationUtilities.h">
@@ -2719,6 +2717,7 @@
     <ClInclude Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebSpeechSynthesizerClientImpl.h">
       <Filter>platform\exported</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebScrollbarThemeClientImpl.h" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="..\..\..\..\..\third_party\WebKit\Source\platform\heap\asm\SaveRegisters_x86.asm">

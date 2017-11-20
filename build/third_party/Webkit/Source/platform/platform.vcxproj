@@ -287,7 +287,6 @@
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebContentDecryptionModule.cpp" />
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebContentDecryptionModuleAccess.cpp" />
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebContentDecryptionModuleResult.cpp" />
-    <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebContentDecryptionModuleResultEmpty.cpp" />
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebContentDecryptionModuleSession.cpp" />
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebContentSettingCallbacks.cpp" />
     <ClCompile Include="..\..\..\..\..\third_party\WebKit\Source\platform\exported\WebConvertableToTraceFormat.cpp" />

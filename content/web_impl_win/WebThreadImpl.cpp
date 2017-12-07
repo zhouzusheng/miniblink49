@@ -27,6 +27,8 @@ namespace content {
 // This is to prevent UI freeze when there are too many timers or machine performance is low.
 static const double maxDurationOfFiringTimers = 0.050;
 
+unsigned WebThreadImpl::m_currentHeapInsertionOrder = 0;
+
 unsigned __stdcall WebThreadImpl::WebThreadImplThreadEntryPoint(void* param)
 {
     WebThreadImpl* impl = (WebThreadImpl*)param;
@@ -34,7 +36,14 @@ unsigned __stdcall WebThreadImpl::WebThreadImplThreadEntryPoint(void* param)
     return 0;
 }
 
+unsigned WebThreadImpl::getNewCurrentHeapInsertionOrder()
+{
+    return atomicIncrement((volatile int *)&m_currentHeapInsertionOrder);
+}
+
+#ifdef _DEBUG
 ActivatingTimerCheck* gActivatingTimerCheck = nullptr;
+#endif
 
 WebThreadImpl::WebThreadImpl(const char* name)
     : m_hEvent(NULL)
@@ -47,14 +56,16 @@ WebThreadImpl::WebThreadImpl(const char* name)
     , m_willExit(false)
     , m_threadClosed(false)
     , m_threadHandle(nullptr)
+    , m_currentFrameCreateTime(0)
 {
     m_name = name;
     ::InitializeCriticalSection(&m_taskPairsMutex);
 
     if (0 == strcmp("MainThread", name)) {
+#ifdef _DEBUG
         if (!gActivatingTimerCheck)
             gActivatingTimerCheck = new ActivatingTimerCheck();
-
+#endif
         m_hadThreadInit = true;
         m_threadId = WTF::currentThread();
         return;
@@ -146,14 +157,20 @@ void WebThreadImpl::postTask(const blink::WebTraceLocation& location, blink::Web
     postDelayedTask(location, task, 0);
 }
 
-void WebThreadImpl::postDelayedTaskImpl(const blink::WebTraceLocation& location, blink::WebThread::Task* task, long long delayMs)
+void WebThreadImpl::postDelayedTaskImpl(
+    const blink::WebTraceLocation& location, blink::WebThread::Task* task, long long delayMs, double* createTimeOnOtherThread, int priority, unsigned* heapInsertionOrder)
 {
     // delete by self
-    WebTimerBase* timer = WebTimerBase::create(this, location, task);
-    timer->startOneShot((double)delayMs / 1000.0);
+    WebTimerBase* timer = WebTimerBase::create(this, location, task, priority);
+//     timer->startOneShot((double)delayMs / 1000.0);
+    timer->startFromOtherThread((double)delayMs / 1000.0, createTimeOnOtherThread, heapInsertionOrder);
 }
 
-void WebThreadImpl::postDelayedTask(const blink::WebTraceLocation& location, blink::WebThread::Task* task, long long delayMs)
+void WebThreadImpl::postDelayedTaskWithPriorityCrossThread(
+    const blink::WebTraceLocation& location, 
+    blink::WebThread::Task* task,
+    long long delayMs,
+    int priority)
 {
     if (m_willExit) {
         delete task;
@@ -161,12 +178,12 @@ void WebThreadImpl::postDelayedTask(const blink::WebTraceLocation& location, bli
     }
 
     if (isCurrentThread()) {
-        postDelayedTaskImpl(location, task, delayMs);
+        postDelayedTaskImpl(location, task, delayMs, &m_currentFrameCreateTime, priority, nullptr);
         return;
     }
 
     ::EnterCriticalSection(&m_taskPairsMutex);
-    m_taskPairsToPost.push_back(new TaskPair(location, task, delayMs));
+    m_taskPairsToPost.push_back(new TaskPair(location, task, delayMs, priority));
 
     if (m_hEvent)
         ::SetEvent(m_hEvent);
@@ -177,11 +194,35 @@ void WebThreadImpl::postDelayedTask(const blink::WebTraceLocation& location, bli
     ::LeaveCriticalSection(&m_taskPairsMutex);
 }
 
-WebThreadImpl::TaskPair::TaskPair(const blink::WebTraceLocation& location, blink::WebThread::Task* task, long long delayMs)
+void WebThreadImpl::postDelayedTask(const blink::WebTraceLocation& location, blink::WebThread::Task* task, long long delayMs)
+{
+    postDelayedTaskWithPriorityCrossThread(location, task, delayMs, kLoadingPriority);
+}
+
+WebThreadImpl::TaskPair::TaskPair(const blink::WebTraceLocation& location, blink::WebThread::Task* task, long long delayMs, int priority)
 {
     this->location = location;
     this->task = task;
     this->delayMs = delayMs;
+    this->priority = priority;
+    this->createTime = WTF::currentTime();
+    this->heapInsertionOrder = WebThreadImpl::getNewCurrentHeapInsertionOrder();
+}
+
+void WebThreadImpl::TaskPair::sortByPriority(std::vector<WebThreadImpl::TaskPair*>* tasks)
+{
+    for (size_t i = 0; i < tasks->size(); ++i) {
+        for (size_t j = i + 1; j < tasks->size(); ++j) {
+            int a = tasks->at(i)->priority;
+            int b = tasks->at(j)->priority;
+            if (!(a < b))
+                continue;
+
+            WebThreadImpl::TaskPair* ptr = tasks->at(i);
+            *(&tasks->at(i)) = tasks->at(j);
+            *(&tasks->at(j)) = ptr;
+        }
+    }
 }
 
 void WebThreadImpl::startTriggerTasks()
@@ -189,6 +230,8 @@ void WebThreadImpl::startTriggerTasks()
 #if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
     wke::freeV8TempObejctOnOneFrameBefore();
 #endif
+    m_currentFrameCreateTime = WTF::currentTime();
+    
     while (true) {
         ::EnterCriticalSection(&m_taskPairsMutex);
         if (0 == m_taskPairsToPost.size()) {
@@ -200,20 +243,19 @@ void WebThreadImpl::startTriggerTasks()
         m_taskPairsToPost.clear();
         ::LeaveCriticalSection(&m_taskPairsMutex);
 
-//         if (taskPairsToPostCopy.size() > 20) {
-//             String out = String::format("WebThreadImpl::startTriggerTasks: %d\n", taskPairsToPostCopy.size());
-//             OutputDebugStringA(out.utf8().data());
-//         }
+        //TaskPair::sortByPriority(&taskPairsToPostCopy);
 
         for (size_t i = 0; i < taskPairsToPostCopy.size(); ++i) {
             TaskPair* taskPair = taskPairsToPostCopy[i];
-            if (0 == taskPair->delayMs) {
-                willProcessTasks();
-                taskPair->task->run();
-                delete taskPair->task;
-                didProcessTasks();
-            } else
-                postDelayedTaskImpl(taskPair->location, taskPair->task, taskPair->delayMs);
+//             if (0 == taskPair->delayMs) {
+//                 willProcessTasks();
+// 
+//                 taskPair->task->run();
+//                 delete taskPair->task;
+// 
+//                 didProcessTasks();
+//             } else
+                postDelayedTaskImpl(taskPair->location, taskPair->task, taskPair->delayMs, &taskPair->createTime, taskPair->priority, &taskPair->heapInsertionOrder);
 
             delete taskPair;
         }
@@ -367,13 +409,15 @@ void WebThreadImpl::schedulerTasks()
     }
 #endif
 
+    startTriggerTasks(); // 如果不加这句，且下面的循环在本线程不停添加定时器，则startTriggerTasks里的就没机会执行了。
+
     while (!m_timerHeap.empty() && (m_timerHeap[0]->m_nextFireTime <= fireTime || m_willExit)) {
         WebTimerBase* timer = m_timerHeap[0];
         timer->m_nextFireTime = 0;
         timer->heapDeleteMin();
 
         double interval = timer->repeatInterval();
-        timer->setNextFireTime(interval ? fireTime + interval : 0);
+        timer->setNextFireTime(interval ? fireTime + interval : 0, nullptr);
 #ifdef _DEBUG
         size_t count = gActivatingTimerCheck->count();
         WebTimerBase* timerDump = timer;
@@ -384,6 +428,8 @@ void WebThreadImpl::schedulerTasks()
         willProcessTasks();
         timer->fired();
         didProcessTasks();
+
+        startTriggerTasks();
 
         // Catch the case where the timer asked timers to fire in a nested event loop, or we are over time limit.
         if (!m_firingTimers || timeToQuit < currentTime())

@@ -33,7 +33,7 @@
 #include "content/web_impl_win/npapi/PluginPackage.h"
 #include "content/web_impl_win/npapi/PluginMainThreadScheduler.h"
 #include "content/web_impl_win/npapi/PluginMessageThrottlerWin.h"
-#include "third_party/npapi/bindings/npapi.h"
+#include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/Source/web/WebLocalFrameImpl.h"
 #include "third_party/WebKit/Source/web/WebPluginContainerImpl.h"
 #include "third_party/WebKit/Source/platform/network/ResourceRequest.h"
@@ -50,10 +50,13 @@
 #include "third_party/WebKit/public/platform/WebTraceLocation.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/WebKit/public/web/WebElement.h"
-#include "gen/blink/core/HTMLNames.h"
+#include "third_party/WebKit/public/web/WebViewClient.h"
 #include "third_party/WebKit/Source/wtf/ASCIICType.h"
 #include "third_party/WebKit/Source/wtf/text/WTFString.h"
 #include "third_party/WebKit/Source/wtf/RefCountedLeakCounter.h"
+#include "third_party/npapi/bindings/npapi.h"
+#include "gen/blink/core/HTMLNames.h"
+#include "wtf/text/WTFStringUtil.h"
 
 using std::min;
 
@@ -81,6 +84,24 @@ static String scriptStringIfJavaScriptURL(const KURL& url)
 
     // This returns an unescaped string
     return decodeURLEscapeSequences(url.string().substring(11));
+}
+
+static void buildResourceRequest(FrameLoadRequest* frameLoadRequest, blink::LocalFrame* parentFrame, const KURL& url, const char* target)
+{
+    if (target)
+        frameLoadRequest->setFrameName(target);
+
+    ResourceRequest* request = &frameLoadRequest->resourceRequest();
+
+    request->setHTTPMethod("GET");
+    request->setURL(url);
+    //request->setHTTPHeaderField("x-requested-with", AtomicString("ShockwaveFlash/17.0.0.171"));
+    //request->setHTTPHeaderField("accept-encoding", AtomicString("gzip, deflate, sdch"));
+    //request->setHTTPHeaderField("accept", AtomicString("*/*"));
+    request->setHTTPHeaderField("user-agent", AtomicString(String(blink::Platform::current()->userAgent())));
+
+    if (parentFrame->document())
+        request->setHTTPHeaderField("referer", AtomicString(parentFrame->document()->baseURL().string()));
 }
 
 RefPtr<Image> s_nullPluginImage;
@@ -122,6 +143,8 @@ WebPluginImpl::WebPluginImpl(WebLocalFrame* parentFrame, const blink::WebPluginP
     , m_manualStream(nullptr)
     , m_isJavaScriptPaused(false)
     , m_haveCalledSetWindow(false)
+    , m_memoryCanvas(nullptr)
+    , m_webviewClient(nullptr)
 {
 #ifndef NDEBUG
     webPluginImplCount.increment();
@@ -129,6 +152,8 @@ WebPluginImpl::WebPluginImpl(WebLocalFrame* parentFrame, const blink::WebPluginP
     if (!m_parentFrame)
         return;
 
+    // if we fail to find a plugin for this MIME type, findPlugin will search for
+    // a plugin by the file extension and update the MIME type, so pass a mutable String
     m_plugin = PluginDatabase::installedPlugins()->findPlugin(m_url, m_mimeType);
 
     // No plugin was found, try refreshing the database and searching again
@@ -153,8 +178,6 @@ WebPluginImpl::WebPluginImpl(WebLocalFrame* parentFrame, const blink::WebPluginP
 
 WebPluginImpl::~WebPluginImpl()
 {
-    //WTF_LOG(Plugins, "WebPluginImpl::~WebPluginImpl()");
-
     ASSERT(!m_lifeSupportTimer.isActive());
 
     // If we failed to find the plug-in, we'll return early in our constructor, and
@@ -172,10 +195,10 @@ WebPluginImpl::~WebPluginImpl()
 
     platformDestroy();
 
-    //m_parentFrame->script().cleanupScriptObjectsForPlugin(this);
+    m_pluginContainer->clearScriptObjects();
 
-    if (m_plugin && !(m_plugin->quirks().contains(PluginQuirkDontUnloadPlugin)))
-        m_plugin->unload();
+//     if (m_plugin && !(m_plugin->quirks().contains(PluginQuirkDontUnloadPlugin)))
+//         m_plugin->unload(); // 不卸载了，卸载容易出各种问题
 
 #ifndef NDEBUG
     webPluginImplCount.decrement();
@@ -194,16 +217,16 @@ void WebPluginImpl::init()
 
     m_haveInitialized = true;
 
-    // if we fail to find a plugin for this MIME type, findPlugin will search for
-    // a plugin by the file extension and update the MIME type, so pass a mutable String
-    PluginPackage* plugin = PluginDatabase::installedPlugins()->findPlugin(m_url, m_mimeType);
+//     // if we fail to find a plugin for this MIME type, findPlugin will search for
+//     // a plugin by the file extension and update the MIME type, so pass a mutable String
+//     m_plugin = PluginDatabase::installedPlugins()->findPlugin(m_url, m_mimeType);
 
     // No plugin was found, try refreshing the database and searching again
-    if (!plugin && PluginDatabase::installedPlugins()->refresh())
-        plugin = PluginDatabase::installedPlugins()->findPlugin(m_url, m_mimeType);
-    
+    if (!m_plugin && PluginDatabase::installedPlugins()->refresh())
+        m_plugin = PluginDatabase::installedPlugins()->findPlugin(m_url, m_mimeType);
+
     if (!m_plugin) {
-        ASSERT(m_status == PluginStatusCanNotFindPlugin);
+        m_status = PluginStatusCanNotLoadPlugin;
         return;
     }
 
@@ -272,8 +295,8 @@ bool WebPluginImpl::start()
 
     if (!m_url.isEmpty() && !m_loadManually) {
         FrameLoadRequest frameLoadRequest(m_parentFrame->document());
-        frameLoadRequest.resourceRequest().setHTTPMethod("GET");
-        frameLoadRequest.resourceRequest().setURL(m_url);
+        buildResourceRequest(&frameLoadRequest, m_parentFrame, m_url, nullptr);
+
         load(frameLoadRequest, false, 0);
     }
 
@@ -295,12 +318,55 @@ void WebPluginImpl::mediaCanStart()
 //         parentFrame()->loader().client().dispatchDidFailToStartPlugin(this);
 }
 
+class DestroyNpTask : public blink::WebThread::TaskObserver {
+public:
+    DestroyNpTask(NPP_DestroyProcPtr destroyFunc, NPP instance)
+    {
+        m_destroyFunc = destroyFunc;
+        m_instance = instance;
+    }
+
+    virtual ~DestroyNpTask() override
+    {
+        delete m_instance;
+    }
+
+    virtual void willProcessTask() override
+    {
+    }
+
+    virtual void didProcessTask() override
+    {
+        NPSavedData* savedData = 0;
+        //WebPluginImpl::setCurrentPluginView(this);
+        //SetCallingPlugin(true);
+        NPError npErr = m_destroyFunc(m_instance, &savedData);
+        //setCallingPlugin(false);
+        //WebPluginImpl::setCurrentPluginView(0);
+
+        String out = String::format("DestroyNpTask: %p, m_instance: %p\n", this, m_instance);
+        OutputDebugStringA(out.utf8().data());
+
+        if (savedData) {
+            // TODO: Actually save this data instead of just discarding it
+            if (savedData->buf)
+                NPN_MemFree(savedData->buf);
+            NPN_MemFree(savedData);
+        }
+
+        blink::Platform::current()->currentThread()->removeTaskObserver(this);
+        delete this;
+    }
+
+private:
+    NPP_DestroyProcPtr m_destroyFunc;
+    NPP m_instance;
+};
+
 void WebPluginImpl::stop()
 {
     if (!m_isStarted)
         return;
-
-    //WTF_LOG(Plugins, "WebPluginImpl::stop(): Stopping plug-in '%s'", m_plugin->name().utf8().data());
 
     HashSetStreams streams = m_streams;
     HashSetStreams::iterator end = streams.end();
@@ -313,9 +379,7 @@ void WebPluginImpl::stop()
     ASSERT(m_streams.isEmpty());
 
     m_isStarted = false;
-
-    //JSC::JSLock::DropAllLocks dropAllLocks(JSDOMWindowBase::commonVM());
-
+    
     // Unsubclass the window
     if (m_isWindowed) {
         WNDPROC currentWndProc = (WNDPROC)GetWindowLongPtr(platformPluginWidget(), GWLP_WNDPROC);
@@ -337,20 +401,12 @@ void WebPluginImpl::stop()
 
     PluginMainThreadScheduler::scheduler().unregisterPlugin(m_instance);
 
-    NPSavedData* savedData = 0;
-    WebPluginImpl::setCurrentPluginView(this);
-    setCallingPlugin(true);
-    NPError npErr = m_plugin->pluginFuncs()->destroy(m_instance, &savedData);
-    setCallingPlugin(false);
-    //LOG_NPERROR(npErr);
-    WebPluginImpl::setCurrentPluginView(0);
-
-    if (savedData) {
-        // TODO: Actually save this data instead of just discarding it
-        if (savedData->buf)
-            NPN_MemFree(savedData->buf);
-        NPN_MemFree(savedData);
-    }
+#if 1 // 这里调用destroy会有问题，如果是在_NPN_Evaluate走到这里的话。例子：http://music.yule.sohu.com/20170926/n514522612.shtml
+    NPP_t* instance = new NPP_t();
+    instance->ndata = m_instance->ndata;
+    instance->pdata = m_instance->pdata;
+    blink::Platform::current()->currentThread()->addTaskObserver(new DestroyNpTask(m_plugin->pluginFuncs()->destroy, instance));
+#endif
 
     m_instance->pdata = 0;
 }
@@ -367,8 +423,8 @@ WebPluginImpl* WebPluginImpl::currentPluginView()
 
 static char* createUTF8String(const String& str)
 {
-    CString cstr = str.utf8();
-    const size_t cstrLength = cstr.length();
+    Vector<char> cstr = WTF::ensureStringToUTF8(str, false);
+    const size_t cstrLength = cstr.size();
     char* result = reinterpret_cast<char*>(fastMalloc(cstrLength + 1));
 
     memcpy(result, cstr.data(), cstrLength);
@@ -391,6 +447,8 @@ void WebPluginImpl::performRequest(PluginRequest* request)
     KURL requestURL = request->frameLoadRequest().resourceRequest().url();
     String jsString = scriptStringIfJavaScriptURL(requestURL);
 
+    Vector<char> requestUrlBuf = ensureStringToUTF8(requestURL.string(), true);
+    
     UserGestureIndicator gestureIndicator(request->shouldAllowPopups() ? DefinitelyProcessingUserGesture : PossiblyProcessingUserGesture);
 
     if (jsString.isNull()) {
@@ -415,7 +473,7 @@ void WebPluginImpl::performRequest(PluginRequest* request)
                 WebPluginImpl::setCurrentPluginView(this);
                 //JSC::JSLock::DropAllLocks dropAllLocks(JSDOMWindowBase::commonVM());
                 setCallingPlugin(true);
-                m_plugin->pluginFuncs()->urlnotify(m_instance, requestURL.string().utf8().data(), NPRES_DONE, request->notifyData());
+                m_plugin->pluginFuncs()->urlnotify(m_instance, requestUrlBuf.data(), NPRES_DONE, request->notifyData());
                 setCallingPlugin(false);
                 WebPluginImpl::setCurrentPluginView(0);
             }
@@ -429,6 +487,7 @@ void WebPluginImpl::performRequest(PluginRequest* request)
     
     // Executing a script can cause the plugin view to be destroyed, so we keep a reference to it.
     RefPtr<WebPluginImpl> protector(this);
+    v8::HandleScope handleScope(toIsolate(m_parentFrame));
     blink::ScriptSourceCode jsCode(jsString);
     v8::Local<v8::Value> result = m_parentFrame->script().executeScriptInMainWorldAndReturnValue(jsCode);
 
@@ -520,9 +579,10 @@ NPError WebPluginImpl::getURLNotify(const char* url, const char* target, void* n
 {
     FrameLoadRequest frameLoadRequest(m_parentFrame->document());
 
-    frameLoadRequest.setFrameName(target);
-    frameLoadRequest.resourceRequest().setHTTPMethod("GET");
-    frameLoadRequest.resourceRequest().setURL(makeURL(m_parentFrame->document()->baseURL(), url));
+//     frameLoadRequest.setFrameName(target);
+//     frameLoadRequest.resourceRequest().setHTTPMethod("GET");
+//     frameLoadRequest.resourceRequest().setURL(makeURL(m_parentFrame->document()->baseURL(), url));
+    buildResourceRequest(&frameLoadRequest, m_parentFrame, makeURL(m_parentFrame->document()->baseURL(), url), target);
 
     return load(frameLoadRequest, true, notifyData);
 }
@@ -531,9 +591,7 @@ NPError WebPluginImpl::getURL(const char* url, const char* target)
 {
     FrameLoadRequest frameLoadRequest(m_parentFrame->document());
 
-    frameLoadRequest.setFrameName(target);
-    frameLoadRequest.resourceRequest().setHTTPMethod("GET");
-    frameLoadRequest.resourceRequest().setURL(makeURL(m_parentFrame->document()->baseURL(), url));
+    buildResourceRequest(&frameLoadRequest, m_parentFrame, makeURL(m_parentFrame->document()->baseURL(), url), target);
 
     return load(frameLoadRequest, false, 0);
 }
@@ -980,7 +1038,9 @@ void WebPluginImpl::invalidateWindowlessPluginRect(const IntRect& rect)
 //     IntRect dirtyRect = rect;
 //     dirtyRect.move(renderer.borderLeft() + renderer.paddingLeft(), renderer.borderTop() + renderer.paddingTop());
 //     renderer.repaintRectangle(dirtyRect);
-    DebugBreak();
+
+    //m_webviewClient->didInvalidateRect(rect);
+    m_pluginContainer->invalidateRect(rect);
 }
 
 void WebPluginImpl::paintMissingPluginIcon(blink::WebCanvas* canvas, const IntRect& rect)
@@ -1055,6 +1115,11 @@ void WebPluginImpl::keepAlive(NPP instance)
         return;
 
     view->keepAlive();
+}
+
+bool WebPluginImpl::isAlive(NPP instance)
+{
+    return !!instanceMap().get(instance);
 }
 
 NPError WebPluginImpl::getValueStatic(NPNVariable variable, void* value)

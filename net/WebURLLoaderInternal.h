@@ -29,6 +29,7 @@
 #include "content/web_impl_win/WebURLLoaderImplCurl.h"
 
 #include "net/MultipartHandle.h"
+#include "net/SharedMemoryDataConsumerHandle.h"
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
@@ -62,97 +63,34 @@ using namespace content;
 
 namespace net {
     
+class WebURLLoaderManagerMainTask;
+class WebURLLoaderManager;
+
 class WebURLLoaderInternal {
-    //WTF_MAKE_NONCOPYABLE(WebURLLoaderInternal); WTF_MAKE_FAST_ALLOCATED;
 public:
-	WebURLLoaderInternal(WebURLLoaderImplCurl* loader, const WebURLRequest& request, WebURLLoaderClient* client, bool defersLoading, bool shouldContentSniff)
-		: m_ref(0)
-		, m_client(client)
-		, m_lastHTTPMethod(request.httpMethod())
-		, status(0)
-		, m_defersLoading(defersLoading)
-		, m_shouldContentSniff(shouldContentSniff)
-		, m_responseFired(false)
-		, m_handle(0)
-		, m_url(0)
-		, m_customHeaders(0)
-		, m_cancelled(false)
-		//, m_formDataStream(loader)
-		, m_scheduledFailureType(NoFailure)
-		, m_loader(loader)
-		, m_failureTimer(this, &WebURLLoaderInternal::fireFailure)
-#if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
-		, m_hookBuf(0)
-		, m_hookLength(0)
-		, m_isHookRequest(false)
-#endif
-    {
-        m_firstRequest = new blink::WebURLRequest(request);
-        KURL url = (KURL)m_firstRequest->url();
-        m_user = url.user();
-        m_pass = url.pass();
+    WebURLLoaderInternal(WebURLLoaderImplCurl* loader, const WebURLRequest& request, WebURLLoaderClient* client, bool defersLoading, bool shouldContentSniff);
+    ~WebURLLoaderInternal();
 
-        m_response.initialize();
-    }
+    int getRefCount() const { return m_ref; }
 
-    ~WebURLLoaderInternal()
-    {
-        delete m_firstRequest;
+    void ref() { atomicIncrement(&m_ref); }
+    void deref() { atomicDecrement(&m_ref); }
 
-        fastFree(m_url);
-        if (m_customHeaders)
-            curl_slist_free_all(m_customHeaders);
-#if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
-		if (m_hookBuf)
-			free(m_hookBuf);
-#endif
-    }
-
-    void ref() { ++m_ref; }
-    void deref()
-    {
-        --m_ref;
-        if (0 >= m_ref) {
-            delete this;
-        }
-    }
-
-    void fireFailure(blink::Timer<WebURLLoaderInternal>*)
-    {
-        if (!client())
-            return;
-
-        switch (m_scheduledFailureType) {
-        case net::WebURLLoaderInternal::NoFailure:
-            ASSERT_NOT_REACHED();
-            return;
-        case net::WebURLLoaderInternal::BlockedFailure:
-            m_scheduledFailureType = net::WebURLLoaderInternal::NoFailure;
-            //client()->wasBlocked(this);
-            return;
-        case net::WebURLLoaderInternal::InvalidURLFailure:
-            m_scheduledFailureType = net::WebURLLoaderInternal::NoFailure;
-            //client()->cannotShowURL(this);
-
-            blink::WebURLError error;
-            error.domain = firstRequest()->url().string();
-            error.localizedDescription = blink::WebString::fromUTF8("Cannot show DataUR\n");
-            if (client() && loader())
-                client()->didFail(loader(), error);
-            return;
-        }
-
-        ASSERT_NOT_REACHED();
-    }
+    int m_ref;
+    int m_id;
+    bool m_isSynchronous;
 
     WebURLLoaderClient* client() { return m_client; }
     WebURLLoaderClient* m_client;
 
     void setResponseFired(bool responseFired) { m_responseFired = responseFired; };
     bool responseFired() { return m_responseFired; }
-    bool m_responseFired;
 
-    int m_ref;
+    WebURLLoaderImplCurl* loader() { return m_loader; }
+    void setLoader(WebURLLoaderImplCurl* loader) { m_loader = loader; }
+
+    blink::WebURLRequest* firstRequest() { return m_firstRequest; }
+
     String m_lastHTTPMethod;
 
     // Suggested credentials for the current redirection step.
@@ -162,6 +100,8 @@ public:
     //Credential m_initialCredential;
 
     int status;
+
+    size_t m_dataLength;
 
     bool m_defersLoading;
     bool m_shouldContentSniff;
@@ -174,33 +114,47 @@ public:
     bool m_cancelled;
 
     //FormDataStream m_formDataStream;
-    Vector<char> m_postBytes;
+    WTF::Vector<char> m_postBytes;
+    size_t m_postBytesReadOffset;
 
     enum FailureType {
         NoFailure,
         BlockedFailure,
         InvalidURLFailure
     };
-
     FailureType m_scheduledFailureType;
-    Timer<WebURLLoaderInternal> m_failureTimer;
 
-    //////////////////////////////////////////////////////////////////////////
-    WebURLLoaderImplCurl* loader() { return m_loader; }
-    void setLoader(WebURLLoaderImplCurl* loader) { m_loader = loader; }
-
-    blink::WebURLRequest* firstRequest() { return m_firstRequest; }
+    bool m_responseFired;
 
     WebURLLoaderImplCurl* m_loader;
-
     blink::WebURLRequest* m_firstRequest;
+    WebURLLoaderManager* m_manager;
+
+    WTF::Mutex m_destroingMutex;
+    enum  State {
+        kNormal,
+        kDestroying,
+        kDestroyed,
+    };
+    State m_state;
+
+    Vector<WebURLLoaderManagerMainTask*> m_syncTasks;
+
+    SharedMemoryDataConsumerHandle::Writer* m_bodyStreamWriter;
 
     String m_debugPath;
 
+    bool m_isBlackList;
+    bool m_isDataUrl;
+
 #if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
-	bool m_isHookRequest;
-	void* m_hookBuf;
-	int m_hookLength;
+    bool m_isHookRequest;
+    void* m_hookBuf;
+    int m_hookLength;
+
+    void* m_asynWkeNetSetData;
+    int m_asynWkeNetSetDataLength;
+    bool m_isWkeNetSetDataBeSetted;
 #endif
 };
 

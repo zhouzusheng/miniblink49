@@ -66,6 +66,7 @@ bool CefBrowserHostImpl::CreateHostWindow(const CefWindowInfo& windowInfo) {
         return false;
 
     ::UpdateWindow(hWnd);
+    ::SetTimer(hWnd, (UINT_PTR)this, 50, nullptr);
 
     m_webPage->setBrowser(this);
     return true;
@@ -151,6 +152,9 @@ LRESULT CALLBACK CefBrowserHostImpl::WndProc(HWND hWnd, UINT message, WPARAM wPa
     case WM_SETFOCUS:
         browserHostImpl->SendFocusEvent(true);
         break;
+    case WM_KILLFOCUS:
+        browserHostImpl->SendFocusEvent(false);
+        break;
     case WM_IME_STARTCOMPOSITION:{
         if (!browserHostImpl->m_webPage)
             return 0;
@@ -160,9 +164,9 @@ LRESULT CALLBACK CefBrowserHostImpl::WndProc(HWND hWnd, UINT message, WPARAM wPa
         COMPOSITIONFORM.ptCurrentPos.x = caret.x();
         COMPOSITIONFORM.ptCurrentPos.y = caret.y();
 
-        HIMC hIMC = ImmGetContext(hWnd);
-        ImmSetCompositionWindow(hIMC, &COMPOSITIONFORM);
-        ImmReleaseContext(hWnd, hIMC);
+        HIMC hIMC = ::ImmGetContext(hWnd);
+        ::ImmSetCompositionWindow(hIMC, &COMPOSITIONFORM);
+        ::ImmReleaseContext(hWnd, hIMC);
         return 0;
     }
         break;
@@ -200,9 +204,10 @@ void CefBrowserHostImpl::SendFocusEvent(bool setFocus) {
     if (!setFocus)
         CancelContextMenu();
 
-    //m_webPage->webViewImpl()->setFocus(setFocus);
-    //m_webPage->webViewImpl()->setIsActive(setFocus);
-    m_webPage->fireSetFocusEvent(m_webPage->getHWND(), WM_SETFOCUS, 0, 0);
+    if (setFocus)
+        m_webPage->fireSetFocusEvent(m_webPage->getHWND(), WM_SETFOCUS, 0, 0);
+    else
+        m_webPage->fireKillFocusEvent(m_webPage->getHWND(), WM_KILLFOCUS, 0, 0);
 }
 
 void CefBrowserHostImpl::PlatformSetFocus(bool focus) {

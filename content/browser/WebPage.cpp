@@ -148,6 +148,24 @@ void WebPage::paintToBit(void* bits, int pitch)
         m_pageImpl->paintToBit(bits, pitch);
 }
 
+void WebPage::disablePaint()
+{
+    if (m_pageImpl)
+        m_pageImpl->disablePaint();
+}
+
+void WebPage::enablePaint()
+{
+    if (m_pageImpl)
+        m_pageImpl->enablePaint();
+}
+
+void WebPage::didStartProvisionalLoad()
+{
+    if (m_pageImpl)
+        m_pageImpl->didStartProvisionalLoad();
+}
+
 bool WebPage::fireTimerEvent()
 {
     if (m_pageImpl)
@@ -405,6 +423,12 @@ void WebPage::didCommitProvisionalLoad(blink::WebLocalFrame* frame, const blink:
 {
     if (m_pageImpl)
         m_pageImpl->didCommitProvisionalLoad(frame, history, type);
+}
+
+void WebPage::setTransparent(bool transparent)
+{
+    if (m_pageImpl)
+        m_pageImpl->setTransparent(transparent);
 }
 
 WebPage* WebPage::getSelfForCurrentContext()

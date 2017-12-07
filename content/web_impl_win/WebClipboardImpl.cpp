@@ -145,10 +145,10 @@ std::string escapeForHTML(const std::string input)
 std::string URLToMarkup(const blink::WebURL& url, const blink::WebString& title)
 {
     std::string markup("<a href=\"");
-    markup.append(url.string().utf8());
+    markup.append(WTF::ensureStringToUTF8(url.string(), true).data());
     markup.append("\">");
     // TODO(darin): HTML escape this
-    markup.append(escapeForHTML(WTF::ensureStringToUTF8((String)(title))));
+    markup.append(escapeForHTML(WTF::ensureStringToUTF8(title, true)));
     markup.append("</a>");
     return markup;
 }
@@ -156,11 +156,11 @@ std::string URLToMarkup(const blink::WebURL& url, const blink::WebString& title)
 std::string URLToImageMarkup(const blink::WebURL& url, const blink::WebString& title)
 {
     std::string markup("<img src=\"");
-    markup.append(escapeForHTML(url.string().utf8()));
+    markup.append(escapeForHTML(WTF::ensureStringToUTF8(url.string(), true).data()));
     markup.append("\"");
     if (!title.isEmpty()) {
         markup.append(" alt=\"");
-        markup.append(escapeForHTML(WTF::ensureStringToUTF8((String)(title))));
+        markup.append(escapeForHTML(WTF::ensureStringToUTF8(title, true)));
         markup.append("\"");
     }
     markup.append("/>");
@@ -512,16 +512,30 @@ void WebClipboardImpl::writeToClipboard(unsigned int format, HANDLE handle)
 
 void WebClipboardImpl::writeText(String string)
 {
-    HGLOBAL glob = createGlobalData(WTF::ensureUTF16UChar(string));
+    HGLOBAL glob = createGlobalData(WTF::ensureUTF16UChar(string, false));
     writeToClipboard(CF_UNICODETEXT, glob);
+}
+
+void WebClipboardImpl::clearClipboard()
+{
+    ScopedClipboard clipboard;
+    if (clipboard.acquire(getClipboardWindow())) {
+        EmptyClipboard();
+    }
 }
 
 void WebClipboardImpl::writePlainText(const WebString& plainText)
 {
+    clearClipboard();
     writeText(plainText);
 }
 
 void WebClipboardImpl::writeHTML(const WebString& htmlText, const WebURL& sourceUrl, const WebString& plainText, bool writeSmartPaste)
+{
+    clearClipboard();
+    writeHTMLInternal(htmlText, sourceUrl, plainText, writeSmartPaste);
+}
+void WebClipboardImpl::writeHTMLInternal(const WebString& htmlText, const WebURL& sourceUrl, const WebString& plainText, bool writeSmartPaste)
 {
     std::string markup = WTF::WTFStringToStdString(htmlText);
     std::string url;
@@ -531,9 +545,9 @@ void WebClipboardImpl::writeHTML(const WebString& htmlText, const WebURL& source
         url = WTFStringToStdString(urlString);
 
     WTF::String htmlFragment = ClipboardUtil::HtmlToCFHtml(markup, url);
-    HGLOBAL glob = createGlobalData(ensureUTF16UChar(htmlFragment));
+    HGLOBAL glob = createGlobalData(ensureUTF16UChar(htmlFragment, false));
     writeToClipboard(getHtmlFormatType(), glob);
-    writePlainText(plainText);
+	writeText(plainText);
 
     if (writeSmartPaste) {
         ASSERT(m_clipboardOwner != NULL);
@@ -634,11 +648,11 @@ bool WebClipboardImpl::writeBitmap(const SkBitmap& bitmap)
 
 void WebClipboardImpl::writeBookmark(const String& titleData , const String& urlData)
 {
-    String bookmark = titleData;
-    bookmark.append('\n');
-    bookmark.append(urlData);
+    String bookmark = WTF::ensureUTF16String(titleData);
+    bookmark.append(L'\n');
+    bookmark.append(WTF::ensureUTF16String(urlData));
 
-    Vector<UChar> wideBookmark = WTF::ensureUTF16UChar(bookmark);
+    Vector<UChar> wideBookmark = WTF::ensureUTF16UChar(bookmark, false);
     HGLOBAL glob = createGlobalData(wideBookmark);
 
     writeToClipboard(getUrlWFormatType(), glob);
@@ -646,6 +660,8 @@ void WebClipboardImpl::writeBookmark(const String& titleData , const String& url
 
 void WebClipboardImpl::writeImage(const WebImage& image, const WebURL& url, const WebString& title)
 {
+    clearClipboard();
+
     ASSERT(!image.isNull());
     const SkBitmap& bitmap = image.getSkBitmap();
     if (!writeBitmap(bitmap))
@@ -674,6 +690,8 @@ void WebClipboardImpl::writeDataObject(const WebDragData& data)
     // written by extension functions such as chrome.bookmarkManagerPrivate.copy.
 
     // DataObject::toWebDragData()
+    clearClipboard();
+
     WebVector<WebDragData::Item> items = data.items();
     for (size_t i = 0; items.size(); ++i) {
         WebDragData::Item& it = items[i];
@@ -683,16 +701,14 @@ void WebClipboardImpl::writeDataObject(const WebDragData& data)
             if (blink::mimeTypeTextPlain == stringType || blink::mimeTypeTextPlainEtc == stringType) {
                 writeText(it.stringData);
             } else if (blink::mimeTypeTextHTML == stringType) {
-                writeHTML(it.stringData, it.baseURL, WebString(), false);
+                writeHTMLInternal(it.stringData, it.baseURL, WebString(), false);
             }
         }
             
 //         if (!data_object.html.is_null())
-//             writeHTML(ui::CLIPBOARD_TYPE_COPY_PASTE,
-//                 data_object.html.string(), GURL());
+//             writeHTML(ui::CLIPBOARD_TYPE_COPY_PASTE, data_object.html.string(), GURL());
 //         if (!data_object.custom_data.empty())
-//             writeCustomData(ui::CLIPBOARD_TYPE_COPY_PASTE,
-//                 data_object.custom_data);
+//             writeCustomData(ui::CLIPBOARD_TYPE_COPY_PASTE, data_object.custom_data);
     }
 }
 

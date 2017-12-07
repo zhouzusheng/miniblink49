@@ -29,11 +29,14 @@
 #include "content/web_impl_win/npapi/WebPluginImpl.h"
 
 #include "content/web_impl_win/npapi/PluginMessageThrottlerWin.h"
+#include "content/browser/CheckReEnter.h"
 #include "third_party/WebKit/Source/web/WebPluginContainerImpl.h"
 #include "third_party/WebKit/Source/core/frame/FrameView.h"
 #include "third_party/WebKit/Source/platform/graphics/Image.h"
-#include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/Source/wtf/Functional.h"
+#include "third_party/WebKit/public/platform/Platform.h"
+#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "skia/ext/bitmap_platform_device_win.h"
 #include "skia/ext/platform_canvas.h"
 
 static inline HWND windowHandleForPageClient(HWND client)
@@ -238,10 +241,7 @@ static inline IntRect contentsToNativeWindow(WebPluginContainer* pluginContainer
 {
     IntPoint posXY(rect.x(), rect.y());
     IntPoint posOutXY = pluginContainer->localToRootFramePoint(posXY);
-
-    IntPoint posMaxXY(rect.maxX(), rect.maxY());
-    IntPoint posMaxOutXY = pluginContainer->localToRootFramePoint(posMaxXY);
-    return IntRect(posOutXY.x(), posOutXY.y(), posOutXY.x() + posMaxOutXY.x(), posOutXY.y() + posMaxOutXY.y());
+    return IntRect(posOutXY.x(), posOutXY.y(), rect.width(), rect.height());
 }
 
 LRESULT WebPluginImpl::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -312,6 +312,8 @@ LRESULT WebPluginImpl::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 
 void WebPluginImpl::updatePluginWidget(const IntRect& windowRect, const IntRect& clipRect)
 {
+    CheckReEnter enterContent(nullptr);
+
     WebPluginContainerImpl* container = (WebPluginContainerImpl*)m_pluginContainer;
     if (!container->parent())
         return;
@@ -361,6 +363,12 @@ void WebPluginImpl::updatePluginWidget(const IntRect& windowRect, const IntRect&
         setCallingPlugin(false);
 
         m_haveUpdatedPluginWidget = true;
+    }
+
+    if (m_windowRect != oldWindowRect || m_clipRect != oldClipRect) {
+        if (m_memoryCanvas)
+            delete m_memoryCanvas;
+        m_memoryCanvas = skia::CreatePlatformCanvas(m_windowRect.width(), m_windowRect.height(), !m_isTransparent);
     }
 }
 
@@ -574,9 +582,119 @@ bool WebPluginImpl::acceptsInputEvents()
     return true;
 }
 
-bool WebPluginImpl::handleInputEvent(const blink::WebInputEvent&, blink::WebCursorInfo&)
+bool WebPluginImpl::handleMouseEvent(const blink::WebMouseEvent& evt)
 {
-    return true;
+    ASSERT(m_plugin && !m_isWindowed);
+
+    bool isDefaultHandled = false;
+    NPEvent npEvent;
+
+    //blink::IntPoint p = contentsToNativeWindow(m_pluginContainer, blink::IntPoint(evt.x, evt.y));
+    blink::IntPoint p(evt.x, evt.y);
+
+    npEvent.lParam = MAKELPARAM(p.x(), p.y());
+    npEvent.wParam = 0;
+
+    if (evt.modifiers & WebInputEvent::ControlKey)
+        npEvent.wParam |= MK_CONTROL;
+    if (evt.modifiers & WebInputEvent::ShiftKey)
+        npEvent.wParam |= MK_SHIFT;
+
+    if (evt.type == blink::WebInputEvent::Type::MouseMove
+        || evt.type == blink::WebInputEvent::Type::MouseLeave
+        || evt.type == blink::WebInputEvent::Type::MouseEnter) {
+        npEvent.event = WM_MOUSEMOVE;
+        if (evt.button != blink::WebMouseEvent::Button::ButtonNone) {
+            switch (evt.button) {
+            case blink::WebMouseEvent::Button::ButtonLeft:
+                npEvent.wParam |= MK_LBUTTON;
+                break;
+            case blink::WebMouseEvent::Button::ButtonMiddle:
+                npEvent.wParam |= MK_MBUTTON;
+                break;
+            case blink::WebMouseEvent::Button::ButtonRight:
+                npEvent.wParam |= MK_RBUTTON;
+                break;
+            }
+        }
+    } else if (evt.type == blink::WebInputEvent::Type::MouseDown) {
+        focusPluginElement();
+        switch (evt.button) {
+        case blink::WebMouseEvent::Button::ButtonLeft:
+            npEvent.event = WM_LBUTTONDOWN;
+            break;
+        case blink::WebMouseEvent::Button::ButtonMiddle:
+            npEvent.event = WM_MBUTTONDOWN;
+            break;
+        case blink::WebMouseEvent::Button::ButtonRight:
+            npEvent.event = WM_RBUTTONDOWN;
+            break;
+        }
+    } else if (evt.type == blink::WebInputEvent::Type::MouseUp) {
+        switch (evt.button) {
+        case blink::WebMouseEvent::Button::ButtonLeft:
+            npEvent.event = WM_LBUTTONUP;
+            break;
+        case blink::WebMouseEvent::Button::ButtonMiddle:
+            npEvent.event = WM_MBUTTONUP;
+            break;
+        case blink::WebMouseEvent::Button::ButtonRight:
+            npEvent.event = WM_RBUTTONUP;
+            break;
+        }
+    } else
+        return isDefaultHandled;
+
+    // FIXME: Consider back porting the http://webkit.org/b/58108 fix here.
+    if (dispatchNPEvent(npEvent))
+        isDefaultHandled = true;
+
+    // Currently, Widget::setCursor is always called after this function in EventHandler.cpp
+    // and since we don't want that we set ignoreNextSetCursor to true here to prevent that.
+//     ignoreNextSetCursor = true;
+//     if (Page* page = m_parentFrame->page())
+//         page->chrome().client().setLastSetCursorToCurrentCursor();
+
+    return isDefaultHandled;
+}
+
+bool WebPluginImpl::handleKeyboardEvent(const blink::WebKeyboardEvent& evt)
+{
+    ASSERT(m_plugin && !m_isWindowed);
+    bool isDefaultHandled = false;
+    NPEvent npEvent;
+
+    npEvent.wParam = evt.windowsKeyCode;
+
+    if (evt.type == blink::WebInputEvent::Type::KeyDown) {
+        npEvent.event = WM_KEYDOWN;
+        npEvent.lParam = 0;
+    } else if (evt.type == blink::WebInputEvent::Type::Char) {
+        npEvent.event = WM_CHAR;
+        npEvent.lParam = 0;
+    } else if (evt.type == blink::WebInputEvent::Type::KeyUp) {
+        npEvent.event = WM_KEYUP;
+        npEvent.lParam = 0x8000;
+    } else
+        return isDefaultHandled;
+
+    if (dispatchNPEvent(npEvent))
+        return true;
+    return isDefaultHandled;
+}
+
+bool WebPluginImpl::handleInputEvent(const blink::WebInputEvent& evt, blink::WebCursorInfo&)
+{
+    if (m_isWindowed)
+        return false;
+
+    if (blink::WebInputEvent::isMouseEventType(evt.type))
+        return handleMouseEvent(static_cast<const blink::WebMouseEvent&>(evt));
+
+    if (blink::WebInputEvent::isKeyboardEventType(evt.type))
+        return handleKeyboardEvent(static_cast<const blink::WebKeyboardEvent&>(evt));
+
+    return false;
 }
 
 void WebPluginImpl::paintIntoTransformedContext(HDC hdc)
@@ -592,10 +710,12 @@ void WebPluginImpl::paintIntoTransformedContext(HDC hdc)
     WINDOWPOS windowpos = { 0, 0, 0, 0, 0, 0, 0 };
 
     WebPluginContainerImpl* container = (WebPluginContainerImpl*)m_pluginContainer;
-    IntRect r = contentsToNativeWindow(m_pluginContainer, container->frameRect());
+    //IntRect r = contentsToNativeWindow(m_pluginContainer, container->frameRect());
+    blink::IntPoint documentScrollOffsetRelativeToViewOrigin = contentsToNativeWindow(m_pluginContainer, blink::IntPoint());
+    blink::IntRect r = container->frameRect();
 
-    windowpos.x = r.x();
-    windowpos.y = r.y();
+    windowpos.x = 0; // r.x();
+    windowpos.y = 0; // r.y();
     windowpos.cx = r.width();
     windowpos.cy = r.height();
 
@@ -678,23 +798,25 @@ void WebPluginImpl::paint(blink::WebCanvas* canvas, const blink::WebRect& rect)
         return;
     }
 
-    // TODO windowsless
-//     IntRect rectInWindow = downcast<FrameView>(*parent()).contentsToWindow(frameRect());
-//     LocalWindowsContext windowsContext(context, rectInWindow, m_isTransparent);
-    HDC hMemoryDC = skia::BeginPlatformPaint(canvas);
+    HDC hMemoryDC = skia::BeginPlatformPaint(m_memoryCanvas);
 
     // On Safari/Windows without transparency layers the GraphicsContext returns the HDC
     // of the window and the plugin expects that the passed in DC has window coordinates.
     //if (!context.isInTransparencyLayer()) {
-        XFORM transform;
-        GetWorldTransform(hMemoryDC, &transform);
-        transform.eDx = 0;
-        transform.eDy = 0;
-        SetWorldTransform(hMemoryDC, &transform);
+//         XFORM transform;
+//         GetWorldTransform(hMemoryDC, &transform);
+//         transform.eDx = -m_windowRect.x();
+//         transform.eDy = -m_windowRect.y();
+//         SetWorldTransform(hMemoryDC, &transform);
     //}
 
     paintIntoTransformedContext(hMemoryDC);
-    skia::EndPlatformPaint(canvas);
+    skia::EndPlatformPaint(m_memoryCanvas);
+
+    SkBaseDevice* bitmapDevice = skia::GetTopDevice(*m_memoryCanvas);
+    const SkBitmap& bitmap = bitmapDevice->accessBitmap(false);
+    
+    canvas->drawBitmap(bitmap, m_windowRect.x(), m_windowRect.y());
 }
 
 void WebPluginImpl::setNPWindowRect(const IntRect& rect)
@@ -710,10 +832,9 @@ void WebPluginImpl::setNPWindowRect(const IntRect& rect)
     if (!frameView)
         return;
 
-    //IntPoint p = frameView->contentsToWindow(rect.location());
     IntPoint p = container->localToRootFramePoint(rect.location());
-    m_npWindow.x = p.x();
-    m_npWindow.y = p.y();
+    m_npWindow.x = 0; // rect.x(); // windowless模式是直接画在0，0点的独立canvas
+    m_npWindow.y = 0; // rect.y();
 
     m_npWindow.width = rect.width();
     m_npWindow.height = rect.height();
@@ -734,11 +855,11 @@ void WebPluginImpl::setNPWindowRect(const IntRect& rect)
         if (!m_isWindowed)
             return;
 
-        ASSERT(platformPluginWidget());
-
-        WNDPROC currentWndProc = (WNDPROC)GetWindowLongPtr(platformPluginWidget(), GWLP_WNDPROC);
-        if (currentWndProc != PluginViewWndProc)
-            m_pluginWndProc = (WNDPROC)SetWindowLongPtr(platformPluginWidget(), GWLP_WNDPROC, (LONG_PTR)PluginViewWndProc);
+        if (platformPluginWidget()) {
+            WNDPROC currentWndProc = (WNDPROC)GetWindowLongPtrW(platformPluginWidget(), GWLP_WNDPROC);
+            if (currentWndProc != PluginViewWndProc)
+                m_pluginWndProc = (WNDPROC)SetWindowLongPtrW(platformPluginWidget(), GWLP_WNDPROC, (LONG_PTR)PluginViewWndProc);
+        }
     }
 }
 
@@ -891,21 +1012,46 @@ void WebPluginImpl::platformStartAsyn(blink::Timer<WebPluginImpl>*)
 #else
         ::SetWindowLongPtrA(platformPluginWidget(), GWL_WNDPROC, (LONG)DefWindowProcA);
 #endif
-        SetProp(platformPluginWidget(), kWebPluginViewProperty, this);
+        ::SetProp(platformPluginWidget(), kWebPluginViewProperty, this);
 
         m_npWindow.type = NPWindowTypeWindow;
         m_npWindow.window = platformPluginWidget();
-    }
-    else {
+    } else {
         m_npWindow.type = NPWindowTypeDrawable;
         m_npWindow.window = 0;
     }
-
+    
     updatePluginWidget(m_windowRect, m_clipRect);
 
     if (!m_plugin->quirks().contains(PluginQuirkDeferFirstSetWindowCall))
         setNPWindowRect(container->frameRect());
 }
+
+class PlatformStartAsynTask : public blink::WebThread::TaskObserver {
+public:
+    PlatformStartAsynTask(WebPluginImpl* webPluginImpl)
+    {
+        m_webPluginImpl = webPluginImpl;
+    }
+
+    virtual ~PlatformStartAsynTask() override
+    {
+    }
+
+    virtual void willProcessTask() override
+    {
+    }
+
+    virtual void didProcessTask() override
+    {
+        m_webPluginImpl->platformStartAsyn(nullptr);
+        blink::Platform::current()->currentThread()->removeTaskObserver(this);
+        delete this;
+    }
+
+private:
+    WebPluginImpl* m_webPluginImpl;
+};
 
 bool WebPluginImpl::platformStart()
 {
@@ -915,24 +1061,44 @@ bool WebPluginImpl::platformStart()
     if (!container)
         return false;
 
-    m_asynStartTimer.startOneShot(0, FROM_HERE);
+    //m_asynStartTimer.startOneShot(0, FROM_HERE);
+    blink::Platform::current()->currentThread()->addTaskObserver(new PlatformStartAsynTask(this));
 
     return true;
 }
 
+static LRESULT CALLBACK platformDestroyNullWndProc(HWND, UINT, WPARAM, LPARAM)
+{
+    return 0;
+}
+
 static void platformDestroyWindow(PlatformPluginWidget widget)
 {
+    bool isUnicode = ::IsWindowUnicode(widget);
+    if (!isUnicode)
+        ::SetWindowLongPtrA(widget, GWLP_WNDPROC, (LONG_PTR)&platformDestroyNullWndProc);
+    else
+        ::SetWindowLongPtrW(widget, GWLP_WNDPROC, (LONG_PTR)&platformDestroyNullWndProc);
+    
     ::DestroyWindow(widget);
 }
 
 void WebPluginImpl::platformDestroy()
 {
-    if (!platformPluginWidget())
+    if (m_memoryCanvas)
+        delete m_memoryCanvas;
+    m_memoryCanvas = nullptr;
+
+    PlatformPluginWidget widget = platformPluginWidget();
+    if (!widget)
         return;
 
-    blink::Platform::current()->currentThread()->postTask(FROM_HERE, WTF::bind(platformDestroyWindow, platformPluginWidget()));
-    SetWindowLongPtr(platformPluginWidget(), GWLP_WNDPROC, 0);
+    blink::Platform::current()->currentThread()->postTask(FROM_HERE, WTF::bind(platformDestroyWindow, widget));
+
+    ++CheckReEnter::s_kEnterContent;
+    ::ShowWindow(widget, SW_HIDE);
     setPlatformPluginWidget(0);
+    --CheckReEnter::s_kEnterContent;
 }
 
 PassRefPtr<Image> WebPluginImpl::snapshot()

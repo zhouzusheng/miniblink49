@@ -58,6 +58,9 @@ typedef PlatformWidget PlatformPluginWidget;
 namespace blink {
 class WebPluginContainer;
 class GraphicsContext;
+class WebViewClient;
+class WebMouseEvent;
+class WebKeyboardEvent;
 }
 
 namespace content {
@@ -230,7 +233,10 @@ public:
     void pushPopupsEnabledState(bool state);
     void popPopupsEnabledState();
 
-    /*virtual*/ void invalidateRect(const blink::IntRect&);
+    bool handleMouseEvent(const blink::WebMouseEvent& evt);
+    bool handleKeyboardEvent(const blink::WebKeyboardEvent& evt);
+
+    void invalidateRect(const blink::IntRect&);
 
     bool arePopupsAllowed() const;
 
@@ -258,6 +264,7 @@ public:
     bool start();
 
     static void keepAlive(NPP);
+    static bool isAlive(NPP);
 
     void keepAlive();
 
@@ -305,6 +312,7 @@ private:
     blink::Timer<WebPluginImpl> m_requestTimer;
     blink::Timer<WebPluginImpl> m_invalidateTimer;
     blink::Timer<WebPluginImpl> m_asynStartTimer;
+    friend class PlatformStartAsynTask;
 
     void asynSetPlatformPluginWidgetVisibilityTimerFired(blink::Timer<WebPluginImpl>*);
     blink::Timer<WebPluginImpl> m_setPlatformPluginWidgetVisibilityTimer;
@@ -359,19 +367,21 @@ public:
     PlatformPluginWidget platformPluginWidget() const { return platformWidget(); }
 
     PlatformWidget platformWidget() const { return m_widget; }
-    inline void setPlatformWidget(PlatformWidget widget)
+    void setPlatformWidget(PlatformWidget widget)
     {
         if (widget != m_widget) {
             m_widget = widget;
         }
     }
 
-    inline void setParentPlatformWidget(PlatformWidget widget)
+    void setParentPlatformWidget(PlatformWidget widget)
     {
         if (widget != m_parentWidget) {
             m_parentWidget = widget;
         }
     }
+
+    void setWebViewClient(blink::WebViewClient* client) { m_webviewClient = client; }
 
     void setHwndRenderOffset(const blink::IntPoint& offset)
     {
@@ -394,6 +404,9 @@ private:
     blink::IntPoint m_widgetOffset;
 
     static WebPluginImpl* s_currentPluginView;
+
+    SkCanvas* m_memoryCanvas;
+    blink::WebViewClient* m_webviewClient;
 };
 
 } // namespace content

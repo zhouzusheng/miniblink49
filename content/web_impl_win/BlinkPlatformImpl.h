@@ -5,6 +5,11 @@ namespace WTF {
 class Mutex;
 }
 
+namespace blink {
+
+template <typename T> class Timer;
+}
+
 namespace cc_blink {
 class WebCompositorSupportImpl;
 }
@@ -16,6 +21,7 @@ class WebThreadImpl;
 class WebMimeRegistryImpl;
 class WebClipboardImpl;
 class WebFileUtilitiesImpl;
+class WebBlobRegistryImpl;
 
 class BlinkPlatformImpl : NON_EXPORTED_BASE(public blink::Platform) {
 public:
@@ -26,7 +32,7 @@ public:
 
     static void initialize();
 
-    void startGarbageCollectedThread();
+    void startGarbageCollectedThread(double delayMs);
    
     virtual void cryptographicallyRandomValues(unsigned char* buffer, size_t length) override;
 
@@ -77,6 +83,10 @@ public:
     virtual blink::WebString queryLocalizedString(blink::WebLocalizedString::Name, const blink::WebString& parameter) override;
     virtual blink::WebString queryLocalizedString(blink::WebLocalizedString::Name, const blink::WebString& parameter1, const blink::WebString& parameter2) override;
 
+    // WaitableEvent------------------------------------------------------ -
+    virtual blink::WebWaitableEvent* createWaitableEvent(blink::WebWaitableEvent::ResetPolicy, blink::WebWaitableEvent::InitialState) override;
+    virtual blink::WebWaitableEvent* waitMultipleEvents(const blink::WebVector<blink::WebWaitableEvent*>& events) override;
+
     // Blob ----------------------------------------------------------------
 
     // Must return non-null.
@@ -98,16 +108,19 @@ public:
     //////////////////////////////////////////////////////////////////////////
     blink::WebThread* tryGetIoThread() const;
     blink::WebThread* ioThread();
+    void doGarbageCollected();
 
 private:
     void destroyWebInfo();
     void closeThread();
-    void doGarbageCollected();
+    void garbageCollectedTimer(blink::Timer<BlinkPlatformImpl>*);
 
     CRITICAL_SECTION* m_lock;
     static const int m_maxThreadNum = 1000;
     std::vector<WebThreadImpl*> m_threads;
     int m_threadNum;
+
+    blink::Timer<BlinkPlatformImpl>* m_gcTimer;
 
     blink::WebThread* m_ioThread;
 
@@ -115,6 +128,7 @@ private:
     blink::WebThemeEngine* m_webThemeEngine;
     WebMimeRegistryImpl* m_mimeRegistry;
     WebClipboardImpl* m_clipboardImpl;
+    WebBlobRegistryImpl* m_blobRegistryImpl;
     WebFileUtilitiesImpl* m_webFileUtilitiesImpl;
     cc_blink::WebCompositorSupportImpl* m_webCompositorSupport;
     blink::WebScrollbarBehavior* m_webScrollbarBehavior;

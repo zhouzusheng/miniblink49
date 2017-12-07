@@ -108,7 +108,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>$(SolutionDir)..\out\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)..\out\tmp\$(ProjectName)\$(Configuration)\</IntDir>
+    <IntDir>K:\miniblink49\out\tmp\miniblink\Debug</IntDir>
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_vc6|Win32'">
@@ -219,7 +219,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <AdditionalLibraryDirectories>$(SolutionDir)..\third_party\GDIPlus\Lib;$(SolutionDir)..\out\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>version.lib;ots.lib;Crypt32.lib;Wldap32.lib;Imm32.lib;libxml.lib;zlib.lib;libcurl.lib;v8_4_8.lib;skia.lib;winmm.lib;Ws2_32.lib;Usp10.lib;Shlwapi.lib;wininet.lib;GDIPlus.lib;libjpeg.lib;libpng.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>version.lib;ots.lib;Crypt32.lib;Wldap32.lib;Imm32.lib;libxml.lib;zlib.lib;libcurl.lib;v8_4_8.lib;skia.lib;winmm.lib;Ws2_32.lib;Usp10.lib;Shlwapi.lib;wininet.lib;GDIPlus.lib;libjpeg.lib;libpng.lib;openssl.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)node$(TargetExt)</OutputFile>
       <ImportLibrary>$(OutDir)node.lib</ImportLibrary>
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib</IgnoreSpecificDefaultLibraries>
@@ -371,7 +371,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <TargetMachine>MachineX86</TargetMachine>
       <AdditionalLibraryDirectories>$(SolutionDir)..\third_party\GDIPlus\Lib;$(SolutionDir)..\out\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libcurl.lib;zlib.lib;ots.lib;libxml.lib;v8_4_8.lib;skia.lib;winmm.lib;Ws2_32.lib;Usp10.lib;Shlwapi.lib;wininet.lib;GDIPlus.lib;version.lib;Crypt32.lib;wldap32.lib;Imm32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;DbgHelp.lib;libjpeg.lib;libpng.lib</AdditionalDependencies>
+      <AdditionalDependencies>libcurl.lib;zlib.lib;ots.lib;libxml.lib;v8_4_8.lib;skia.lib;winmm.lib;Ws2_32.lib;Usp10.lib;Shlwapi.lib;wininet.lib;GDIPlus.lib;version.lib;Crypt32.lib;wldap32.lib;Imm32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;DbgHelp.lib;libjpeg.lib;libpng.lib;openssl.lib</AdditionalDependencies>
       <AdditionalOptions>/FORCE:UNRESOLVED %(AdditionalOptions)</AdditionalOptions>
       <OutputFile>$(OutDir)node$(TargetExt)</OutputFile>
       <ImportLibrary>$(OutDir)node.lib</ImportLibrary>
@@ -399,7 +399,7 @@
       <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
       <ExceptionHandling>false</ExceptionHandling>
       <BufferSecurityCheck>false</BufferSecurityCheck>
-      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
       <StringPooling>true</StringPooling>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -409,7 +409,7 @@
       <AdditionalOptions>/Zc:threadSafeInit- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
-      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <GenerateDebugInformation>Debug</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -417,7 +417,7 @@
       <AdditionalLibraryDirectories>$(SolutionDir)..\third_party\GDIPlus\Lib;$(SolutionDir)..\out\Release_vc6\</AdditionalLibraryDirectories>
       <AdditionalDependencies>libcurl.lib;zlib.lib;ots.lib;libxml.lib;v8_4_5.lib;skia.lib;winmm.lib;Ws2_32.lib;Usp10.lib;Shlwapi.lib;wininet.lib;GDIPlus.lib;version.lib;Crypt32.lib;wldap32.lib;Imm32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;openssl.lib;libjpeg.lib;libpng.lib</AdditionalDependencies>
       <AdditionalOptions>/FORCE:UNRESOLVED %(AdditionalOptions)</AdditionalOptions>
-      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
+      <OutputFile>$(OutDir)node.dll</OutputFile>
       <ImportLibrary>$(OutDir)miniblink.lib</ImportLibrary>
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib</IgnoreSpecificDefaultLibraries>
       <ShowProgress>NotSet</ShowProgress>
@@ -497,6 +497,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorker.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorkerGlobalScope.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorkerManager.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorkerMessagingProxy.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorkerThread.cpp" />
     <ClCompile Include="..\..\base\algorithmvc6.cpp">
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release_vc6|Win32'">false</WholeProgramOptimization>
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</WholeProgramOptimization>
@@ -679,6 +684,7 @@
     <ClCompile Include="..\..\cef\libcef_dll\notImplemented_cef.cpp" />
     <ClCompile Include="..\..\cef\libcef_dll\transfer_util.cc" />
     <ClCompile Include="..\..\cef\libcef_dll\unused_export.cpp" />
+    <ClCompile Include="..\..\content\browser\CheckReEnter.cpp" />
     <ClCompile Include="..\..\content\browser\NavigationController.cpp" />
     <ClCompile Include="..\..\content\browser\PlatformEventHandler.cpp" />
     <ClCompile Include="..\..\content\browser\PopupMenuWin.cpp" />
@@ -712,6 +718,7 @@
     <ClCompile Include="..\..\content\web_impl_win\npapi\PluginStream.cpp" />
     <ClCompile Include="..\..\content\web_impl_win\npapi\WebPluginImpl.cpp" />
     <ClCompile Include="..\..\content\web_impl_win\npapi\WebPluginImplWin.cpp" />
+    <ClCompile Include="..\..\content\web_impl_win\WaitableEventWin.cpp" />
     <ClCompile Include="..\..\content\web_impl_win\WebBlobRegistryImpl.cpp" />
     <ClCompile Include="..\..\content\web_impl_win\WebClipboardImpl.cpp" />
     <ClCompile Include="..\..\content\web_impl_win\WebCookieJarCurlImpl.cpp" />
@@ -722,6 +729,7 @@
     <ClCompile Include="..\..\content\web_impl_win\WebThemeEngineImpl.cpp" />
     <ClCompile Include="..\..\content\web_impl_win\WebThreadImpl.cpp" />
     <ClCompile Include="..\..\content\web_impl_win\WebTimerBase.cpp" />
+    <ClCompile Include="..\..\content\web_impl_win\WebURLLoaderImpl.cpp" />
     <ClCompile Include="..\..\content\web_impl_win\WebURLLoaderImplCurl.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\UnionTypesCore.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8Animation.cpp" />
@@ -780,6 +788,7 @@
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8DataTransferItem.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8DataTransferItemList.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8DataView.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8DedicatedWorkerGlobalScope.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8Document.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8DocumentFragment.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8DocumentType.cpp" />
@@ -954,6 +963,15 @@
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PagePopupController.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PageTransitionEvent.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PageTransitionEventInit.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8Performance.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PerformanceCompositeTiming.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PerformanceEntry.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PerformanceMark.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PerformanceMeasure.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PerformanceNavigation.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PerformanceRenderTiming.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PerformanceResourceTiming.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PerformanceTiming.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PluginPlaceholderElement.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PointerEvent.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PointerEventInit.cpp" />
@@ -966,6 +984,10 @@
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8PromiseRejectionEventInit.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8RadioNodeList.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8Range.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8ReadableByteStream.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8ReadableByteStreamReader.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8ReadableStream.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8ReadableStreamReader.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8RefCountedScriptWrappable.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8RelatedEvent.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8RelatedEventInit.cpp" />
@@ -980,6 +1002,8 @@
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8ShadowRoot.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8ShadowRootInit.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8SharedArrayBuffer.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8SharedWorker.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\v8sharedworkerglobalscope.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8StateOptions.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8Stream.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8StringCallback.cpp" />
@@ -1143,6 +1167,12 @@
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8WheelEvent.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8WheelEventInit.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8Window.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8Worker.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8WorkerConsole.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8WorkerGlobalScope.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8WorkerLocation.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8WorkerNavigator.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8WorkerPerformance.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8XMLDocument.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8XMLHttpRequest.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8XMLHttpRequestEventTarget.cpp" />
@@ -1150,14 +1180,19 @@
     <ClCompile Include="..\..\gen\blink\bindings\core\v8\V8XMLHttpRequestUpload.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\initPartialInterfacesInModules.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\UnionTypesModulesNone.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8Body.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8Canvas2DContextAttributes.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8CanvasGradient.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8CanvasPattern.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8CanvasRenderingContext2D.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8CloseEvent.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8CloseEventInit.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8CompositorWorker.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8CompositorWorkerGlobalScope.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8DedicatedWorkerGlobalScopePartial.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8DeprecatedStorageInfo.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8DeprecatedStorageQuota.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8Headers.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8HeadersNone.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8HitRegionOptions.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8HTMLVideoElementPartial.cpp" />
@@ -1169,6 +1204,9 @@
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8Path2D.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8Plugin.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8PluginArray.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8Request.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8Response.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8SharedWorkerGlobalScopePartial.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8Storage.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8StorageErrorCallback.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8StorageEvent.cpp" />
@@ -1177,9 +1215,15 @@
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8StorageQuota.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8StorageQuotaCallback.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8StorageUsageCallback.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8TextDecodeOptions.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8TextDecoder.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8TextDecoderOptions.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8TextEncoder.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8URLPartial.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8WebSocket.cpp" />
     <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8WindowPartial.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8WorkerGlobalScopePartial.cpp" />
+    <ClCompile Include="..\..\gen\blink\bindings\modules\v8\V8WorkerNavigatorPartial.cpp" />
     <ClCompile Include="..\..\gen\blink\core\animation\ComputedTimingProperties.cpp" />
     <ClCompile Include="..\..\gen\blink\core\animation\KeyframeEffectOptions.cpp" />
     <ClCompile Include="..\..\gen\blink\core\CSSPropertyMetadata.cpp" />
@@ -1252,6 +1296,8 @@
     <ClCompile Include="..\..\gen\blink\core\XMLNSNames.cpp" />
     <ClCompile Include="..\..\gen\blink\modules\canvas2d\Canvas2DContextAttributes.cpp" />
     <ClCompile Include="..\..\gen\blink\modules\canvas2d\HitRegionOptions.cpp" />
+    <ClCompile Include="..\..\gen\blink\modules\encoding\TextDecodeOptions.cpp" />
+    <ClCompile Include="..\..\gen\blink\modules\encoding\TextDecoderOptions.cpp" />
     <ClCompile Include="..\..\gen\blink\modules\EventModules.cpp" />
     <ClCompile Include="..\..\gen\blink\modules\EventModulesNames.cpp" />
     <ClCompile Include="..\..\gen\blink\modules\EventTargetModulesNames.cpp" />
@@ -1266,12 +1312,20 @@
     <ClCompile Include="..\..\gin\v8_initializer.cc" />
     <ClCompile Include="..\..\gin\v8_platform.cc" />
     <ClCompile Include="..\..\net\ActivatingLoaderCheck.cpp" />
+    <ClCompile Include="..\..\net\AsyncFileStream.cpp" />
+    <ClCompile Include="..\..\net\BlobResourceLoader.cpp" />
     <ClCompile Include="..\..\net\cookies\CanonicalCookie.cpp" />
     <ClCompile Include="..\..\net\cookies\CookieMonster.cpp" />
     <ClCompile Include="..\..\net\cookies\CookieUtil.cpp" />
     <ClCompile Include="..\..\net\cookies\ParsedCookie.cpp" />
     <ClCompile Include="..\..\net\DataURL.cpp" />
+    <ClCompile Include="..\..\net\FileStream.cpp" />
+    <ClCompile Include="..\..\net\FileSystem.cpp" />
+    <ClCompile Include="..\..\net\FileSystemWin.cpp" />
+    <ClCompile Include="..\..\net\FixedReceivedData.cpp" />
     <ClCompile Include="..\..\net\MultipartHandle.cpp" />
+    <ClCompile Include="..\..\net\PathWalker.cpp" />
+    <ClCompile Include="..\..\net\SharedMemoryDataConsumerHandle.cpp" />
     <ClCompile Include="..\..\net\websocket\SocketStreamErrorBase.cpp" />
     <ClCompile Include="..\..\net\websocket\SocketStreamHandleBase.cpp" />
     <ClCompile Include="..\..\net\websocket\SocketStreamHandleCurl.cpp" />
@@ -1283,6 +1337,7 @@
     <ClCompile Include="..\..\net\websocket\WebSocketHandshake.cpp" />
     <ClCompile Include="..\..\net\websocket\WebSocketOneFrame.cpp" />
     <ClCompile Include="..\..\net\WebURLLoaderManager.cpp" />
+    <ClCompile Include="..\..\net\WebURLLoaderWinINet.cpp" />
     <ClCompile Include="..\..\node\cares\src\ares_cancel.c">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">../../node/src;../../node/uv/include;../../node/cares/include;../../node/v8_inspector;../../node/openssl/openssl/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
@@ -3248,6 +3303,7 @@
     <ClCompile Include="..\..\third_party\WebKit\Source\bindings\core\v8\V8IteratorResultValue.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\bindings\core\v8\V8NPObject.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\bindings\core\v8\V8NPUtils.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\bindings\core\v8\V8ObjectBuilder.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\bindings\core\v8\V8PagePopupControllerBinding.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\bindings\core\v8\WindowProxyManager.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\bindings\modules\v8\ScriptValueSerializerForModules.cpp" />
@@ -4013,6 +4069,9 @@
     <ClCompile Include="..\..\third_party\WebKit\Source\core\paint\TransformRecorder.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\paint\VideoPainter.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\paint\ViewPainter.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\streams\ReadableByteStream.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\streams\ReadableStream.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\streams\ReadableStreamReader.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\streams\Stream.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\style\AppliedTextDecoration.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\style\BasicShapes.cpp" />
@@ -4052,7 +4111,41 @@
     <ClCompile Include="..\..\third_party\WebKit\Source\core\svg\SVGAnimatedString.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\testing\LayerRectList.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\ConsoleMemory.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\DOMWindowPerformance.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\MemoryInfo.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\Performance.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\PerformanceBase.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\PerformanceCompositeTiming.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\PerformanceEntry.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\PerformanceNavigation.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\PerformanceRenderTiming.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\PerformanceResourceTiming.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\PerformanceTiming.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\PerformanceUserTiming.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\SharedWorkerPerformance.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\WorkerGlobalScopePerformance.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\timing\WorkerPerformance.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\AbstractWorker.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\DedicatedWorkerGlobalScope.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\DedicatedWorkerMessagingProxy.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\DedicatedWorkerThread.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\InProcessWorkerBase.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\SharedWorker.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\SharedWorkerGlobalScope.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\SharedWorkerThread.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\Worker.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerConsole.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerEventQueue.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerGlobalScope.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerGlobalScopeProxyProvider.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerInspectorProxy.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerLoaderProxy.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerMessagingProxy.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerNavigator.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerObjectProxy.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerScriptLoader.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerThread.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\core\workers\WorkerThreadStartupData.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\xml\DOMParser.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\xml\parser\SharedBufferReader.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\core\xml\parser\XMLDocumentParser.cpp" />
@@ -4068,6 +4161,25 @@
     <ClCompile Include="..\..\third_party\WebKit\Source\modules\canvas2d\ContextAttributeHelpers.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\modules\canvas2d\HitRegion.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\modules\canvas2d\Path2D.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\encoding\Encoding.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\encoding\TextDecoder.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\encoding\TextEncoder.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\Body.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\BodyStreamBuffer.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\CompositeDataConsumerHandle.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\DataConsumerHandleUtil.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\DataConsumerTee.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\FetchBlobDataConsumerHandle.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\FetchDataLoader.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\FetchHeaderList.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\FetchManager.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\FetchRequestData.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\FetchResponseData.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\GlobalFetch.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\Headers.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\Request.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\RequestInit.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\modules\fetch\Response.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\modules\InitModules.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\modules\navigatorcontentutils\NavigatorContentUtils.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\modules\plugins\DOMMimeType.cpp" />
@@ -4113,6 +4225,7 @@
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebCString.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebCursorInfo.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebData.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebDataConsumerHandle.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebDragData.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebFilterKeyframe.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebHTTPBody.cpp" />
@@ -4132,6 +4245,8 @@
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebScrollbarThemePainter.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebSecurityOrigin.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebSerializedOrigin.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebServiceWorkerRequest.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebServiceWorkerResponse.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebStorageQuotaCallbacks.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebString.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\platform\exported\WebThreadedDataReceiver.cpp" />
@@ -4329,6 +4444,8 @@
     <ClCompile Include="..\..\third_party\WebKit\Source\web\WebUserGestureIndicator.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\web\WebUserGestureToken.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\web\WebViewImpl.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\web\WorkerContentSettingsClient.cpp" />
+    <ClCompile Include="..\..\third_party\WebKit\Source\web\WorkerGlobalScopeProxyProviderImpl.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\wtf\Partitions.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\wtf\text\qt4\UnicodeQt4.cpp" />
     <ClCompile Include="..\..\third_party\WebKit\Source\wtf\text\UTF8.cpp" />
@@ -5212,6 +5329,12 @@
     <ClCompile Include="..\..\third_party\WebKit\Source\wtf\WTFThreadData.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\content\browser\ToolTip.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorker.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorkerGlobalScope.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorkerManager.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorkerMessagingProxy.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\compositorworker\CompositorWorkerThread.h" />
     <ClInclude Include="..\..\base\command_line.h" />
     <ClInclude Include="..\..\base\debug\alias.h" />
     <ClInclude Include="..\..\base\debug\gdi_debug_util_win.h" />
@@ -5247,7 +5370,9 @@
     <ClInclude Include="..\..\cc\raster\SkBitmapRefWrap.h" />
     <ClInclude Include="..\..\cc\tiles\CompositingTile.h" />
     <ClInclude Include="..\..\cc\tiles\Tile.h" />
+    <ClInclude Include="..\..\cc\tiles\TileBase.h" />
     <ClInclude Include="..\..\cc\tiles\TileGrid.h" />
+    <ClInclude Include="..\..\cc\tiles\TilesAddr.h" />
     <ClInclude Include="..\..\cc\trees\ActionsFrameGroup.h" />
     <ClInclude Include="..\..\cc\trees\DrawProperties.h" />
     <ClInclude Include="..\..\cc\trees\LayerSorter.h" />
@@ -5476,6 +5601,7 @@
     <ClInclude Include="..\..\cef\libcef_dll\cpptoc\frame_cpptoc.h" />
     <ClInclude Include="..\..\cef\libcef_dll\ctocpp\resolve_callback_ctocpp.h" />
     <ClInclude Include="..\..\cef\libcef_dll\ctocpp\response_filter_ctocpp.h" />
+    <ClInclude Include="..\..\content\browser\CheckReEnter.h" />
     <ClInclude Include="..\..\content\browser\NavigationController.h" />
     <ClInclude Include="..\..\content\browser\PlatformEventHandler.h" />
     <ClInclude Include="..\..\content\browser\PopupMenuWin.h" />
@@ -5500,6 +5626,7 @@
     <ClInclude Include="..\..\content\web_impl_win\npapi\PluginStream.h" />
     <ClInclude Include="..\..\content\web_impl_win\npapi\WebPluginImpl.h" />
     <ClInclude Include="..\..\content\web_impl_win\ui\ClipboardUtil.h" />
+    <ClInclude Include="..\..\content\web_impl_win\WaitableEvent.h" />
     <ClInclude Include="..\..\content\web_impl_win\WebBlobRegistryImpl.h" />
     <ClInclude Include="..\..\content\web_impl_win\WebClipboardImpl.h" />
     <ClInclude Include="..\..\content\web_impl_win\WebCookieJarCurlImpl.h" />
@@ -5972,11 +6099,16 @@
     <ClInclude Include="..\..\gen\blink\bindings\core\v8\V8XMLHttpRequestProgressEvent.h" />
     <ClInclude Include="..\..\gen\blink\bindings\core\v8\V8XMLHttpRequestUpload.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\UnionTypesModules.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8Body.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8Canvas2DContextAttributes.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8CanvasGradient.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8CanvasPattern.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8CloseEvent.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8CloseEventInit.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8CompositorWorker.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8CompositorWorkerGlobalScope.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8CrossOriginServiceWorkerClient.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8DedicatedWorkerGlobalScopePartial.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8DeprecatedStorageInfo.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8DeprecatedStorageQuota.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8HitRegionOptions.h" />
@@ -5986,6 +6118,13 @@
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8Path2D.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8Plugin.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8PluginArray.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8ServiceWorker.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8ServiceWorkerContainer.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8ServiceWorkerGlobalScope.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8ServiceWorkerMessageEvent.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8ServiceWorkerMessageEventInit.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8ServiceWorkerRegistration.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8SharedWorkerGlobalScopePartial.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8Storage.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8StorageErrorCallback.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8StorageEvent.h" />
@@ -5994,8 +6133,14 @@
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8StorageQuota.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8StorageQuotaCallback.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8StorageUsageCallback.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8TextDecodeOptions.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8TextDecoder.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8TextDecoderOptions.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8TextEncoder.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8URLPartial.h" />
     <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8WebSocket.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8WorkerGlobalScopePartial.h" />
+    <ClInclude Include="..\..\gen\blink\bindings\modules\v8\V8WorkerNavigatorPartial.h" />
     <ClInclude Include="..\..\gen\blink\core\animation\ComputedTimingProperties.h" />
     <ClInclude Include="..\..\gen\blink\core\animation\KeyframeEffectOptions.h" />
     <ClInclude Include="..\..\gen\blink\core\CSSPropertyNames.h" />
@@ -6084,6 +6229,8 @@
     <ClInclude Include="..\..\gen\blink\modules\canvas2d\Canvas2DContextAttributes.h" />
     <ClInclude Include="..\..\gen\blink\modules\canvas2d\HitRegionOptions.h" />
     <ClInclude Include="..\..\gen\blink\modules\DedicatedWorkerGlobalScopeModulesConstructors.h" />
+    <ClInclude Include="..\..\gen\blink\modules\encoding\TextDecodeOptions.h" />
+    <ClInclude Include="..\..\gen\blink\modules\encoding\TextDecoderOptions.h" />
     <ClInclude Include="..\..\gen\blink\modules\EventModulesHeaders.h" />
     <ClInclude Include="..\..\gen\blink\modules\EventModulesInterfaces.h" />
     <ClInclude Include="..\..\gen\blink\modules\EventModulesNames.h" />
@@ -6108,16 +6255,28 @@
     <ClInclude Include="..\..\gin\public\wrapper_info.h" />
     <ClInclude Include="..\..\gin\v8_initializer.h" />
     <ClInclude Include="..\..\net\ActivatingLoaderCheck.h" />
+    <ClInclude Include="..\..\net\AsyncFileStream.h" />
     <ClInclude Include="..\..\net\BlinkSynchronousLoader.h" />
+    <ClInclude Include="..\..\net\BlobResourceLoader.h" />
     <ClInclude Include="..\..\net\cookies\CanonicalCookie.h" />
     <ClInclude Include="..\..\net\cookies\CookieConstants.h" />
     <ClInclude Include="..\..\net\cookies\CookieMonster.h" />
     <ClInclude Include="..\..\net\cookies\CookieUtil.h" />
     <ClInclude Include="..\..\net\cookies\ParsedCookie.h" />
     <ClInclude Include="..\..\net\DataURL.h" />
+    <ClInclude Include="..\..\net\FileStream.h" />
+    <ClInclude Include="..\..\net\FileStreamClient.h" />
+    <ClInclude Include="..\..\net\FileSystem.h" />
+    <ClInclude Include="..\..\net\FixedReceivedData.h" />
+    <ClInclude Include="..\..\net\MemBlobStream.h" />
     <ClInclude Include="..\..\net\MultipartHandle.h" />
+    <ClInclude Include="..\..\net\PathWalker.h" />
     <ClInclude Include="..\..\net\RequestExtraData.h" />
+    <ClInclude Include="..\..\net\RequestPeer.h" />
+    <ClInclude Include="..\..\net\SharedMemoryDataConsumerHandle.h" />
+    <ClInclude Include="..\..\net\SharedMemoryReceivedDataFactory.h" />
     <ClInclude Include="..\..\net\SSLHandle.h" />
+    <ClInclude Include="..\..\net\StreamReader.h" />
     <ClInclude Include="..\..\net\websocket\SocketStreamError.h" />
     <ClInclude Include="..\..\net\websocket\SocketStreamErrorBase.h" />
     <ClInclude Include="..\..\net\websocket\SocketStreamHandle.h" />
@@ -6717,6 +6876,7 @@
     <ClInclude Include="..\..\third_party\WebKit\Source\bindings\core\v8\ScriptValueSerializer.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\bindings\core\v8\ToV8.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\bindings\core\v8\V8IteratorResultValue.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\bindings\core\v8\V8ObjectBuilder.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\bindings\core\v8\WindowProxyManager.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\bindings\modules\v8\ScriptValueSerializerForModules.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\bindings\modules\v8\SerializedScriptValueForModulesFactory.h" />
@@ -7623,6 +7783,11 @@
     <ClInclude Include="..\..\third_party\WebKit\Source\core\paint\TransformRecorder.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\paint\VideoPainter.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\paint\ViewPainter.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\streams\ReadableByteStream.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\streams\ReadableByteStreamReader.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\streams\ReadableStream.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\streams\ReadableStreamImpl.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\streams\ReadableStreamReader.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\style\AppliedTextDecoration.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\style\AuthorStyleInfo.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\style\BasicShapes.h" />
@@ -7689,7 +7854,47 @@
     <ClInclude Include="..\..\third_party\WebKit\Source\core\testing\LayerRect.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\testing\LayerRectList.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\ConsoleMemory.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\DOMWindowPerformance.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\MemoryInfo.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\Performance.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceBase.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceCompositeTiming.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceEntry.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceMark.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceMeasure.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceNavigation.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceRenderTiming.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceResourceTiming.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceTiming.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\PerformanceUserTiming.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\SharedWorkerPerformance.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\WorkerGlobalScopePerformance.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\timing\WorkerPerformance.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\DedicatedWorkerGlobalScope.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\DedicatedWorkerMessagingProxy.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\DedicatedWorkerThread.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\InProcessWorkerBase.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\SharedWorker.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\SharedWorkerGlobalScope.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\SharedWorkerRepositoryClient.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\SharedWorkerThread.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\Worker.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerClients.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerConsole.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerEventQueue.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerGlobalScope.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerGlobalScopeProxy.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerGlobalScopeProxyProvider.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerInspectorProxy.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerLoaderProxy.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerLocation.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerMessagingProxy.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerNavigator.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerObjectProxy.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerReportingProxy.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerScriptLoader.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerThread.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\core\workers\WorkerThreadStartupData.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\xml\DOMParser.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\xml\parser\SharedBufferReader.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\core\xml\parser\XMLDocumentParser.h" />
@@ -7707,6 +7912,27 @@
     <ClInclude Include="..\..\third_party\WebKit\Source\modules\canvas2d\HitRegion.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\modules\canvas2d\MouseEventHitRegion.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\modules\canvas2d\Path2D.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\encoding\Encoding.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\encoding\TextDecoder.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\encoding\TextEncoder.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\Body.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\BodyStreamBuffer.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\CompositeDataConsumerHandle.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\DataConsumerHandleUtil.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\DataConsumerTee.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\FetchBlobDataConsumerHandle.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\FetchDataConsumerHandle.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\FetchDataLoader.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\FetchHeaderList.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\FetchManager.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\FetchRequestData.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\FetchResponseData.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\GlobalFetch.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\Headers.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\Request.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\RequestInit.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\Response.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\modules\fetch\ResponseInit.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\modules\InitModules.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\modules\navigatorcontentutils\NavigatorContentUtils.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\modules\navigatorcontentutils\NavigatorContentUtilsClient.h" />
@@ -7914,6 +8140,8 @@
     <ClInclude Include="..\..\third_party\WebKit\Source\web\WebStorageNamespaceImpl.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\web\WebTextCheckingCompletionImpl.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\web\WebViewImpl.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\web\WorkerContentSettingsClient.h" />
+    <ClInclude Include="..\..\third_party\WebKit\Source\web\WorkerGlobalScopeProxyProviderImpl.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\wtf\Partitions.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\wtf\text\qt4\QChar.h" />
     <ClInclude Include="..\..\third_party\WebKit\Source\wtf\text\qt4\QString.h" />
@@ -9291,6 +9519,7 @@
     <ClInclude Include="..\..\third_party\WebKit\Source\wtf\WTFThreadData.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\third_party\WebKit\Source\modules\compositorworker\DEPS" />
     <None Include="..\..\gen\blink\core\EventInterfaces.in" />
     <None Include="..\..\third_party\WebKit\Source\core\animation\OWNERS" />
     <None Include="..\..\third_party\WebKit\Source\core\css\parser\CSSGrammar.y" />
@@ -9310,6 +9539,10 @@
     <None Include="..\..\third_party\WebKit\Source\devtools\front_end\Images\src\svg2png.hashes" />
     <None Include="..\..\third_party\WebKit\Source\devtools\front_end\inspector.html" />
     <None Include="..\..\third_party\WebKit\Source\devtools\front_end\toolbox.html" />
+    <None Include="..\..\third_party\WebKit\Source\modules\encoding\DEPS" />
+    <None Include="..\..\third_party\WebKit\Source\modules\encoding\OWNERS" />
+    <None Include="..\..\third_party\WebKit\Source\modules\fetch\DEPS" />
+    <None Include="..\..\third_party\WebKit\Source\modules\fetch\OWNERS" />
     <None Include="..\..\third_party\WebKit\Source\modules\mediastream\DEPS" />
     <None Include="..\..\third_party\WebKit\Source\modules\quota\DEPS" />
     <None Include="..\..\third_party\WebKit\Source\modules\quota\OWNERS" />

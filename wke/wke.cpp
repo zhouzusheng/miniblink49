@@ -19,78 +19,93 @@
 namespace net {
 
 void setCookieJarPath(const WCHAR* path);
+void setCookieJarFullPath(const WCHAR* path);
+bool g_cspCheckEnable = true;
+bool g_navigationToNewWindowEnable = true;
 
 }
 
 //////////////////////////////////////////////////////////////////////////
 static std::string* s_versionString = nullptr;
 static bool wkeIsInit = false;
+bool g_wkeMemoryCacheEnable = true;
 
 bool wkeIsUpdataInOtherThread = false;
 
+unsigned int g_mbRuntimeEnabledFeatures = 0;
+
 void wkeInitialize()
 {
-	if (!wkeIsInit) {
-		//double-precision float
-		_controlfp(_PC_53, _MCW_PC);
+    if (wkeIsInit)
+        return;
 
-		CoInitialize(NULL);
+    //double-precision float
+    _controlfp(_PC_53, _MCW_PC);
 
-		content::WebPage::initBlink();
-		wkeIsInit = true;
-	}
+    CoInitialize(NULL);
+
+    content::WebPage::initBlink();
+    wkeIsInit = true;
 }
 
-void wkeSetProxy(const wkeProxy& proxy)
+struct ProxyInfo {
+    net::WebURLLoaderManager::ProxyType proxyType;
+    String hostname;
+    String username;
+    String password;
+
+    static WTF::PassOwnPtr<ProxyInfo> create(const wkeProxy& proxy) {
+        WTF::PassOwnPtr<ProxyInfo> info = WTF::adoptPtr(new ProxyInfo());
+        info->proxyType = net::WebURLLoaderManager::HTTP;
+
+        if (proxy.hostname[0] != 0 && proxy.type >= WKE_PROXY_HTTP && proxy.type <= WKE_PROXY_SOCKS5HOSTNAME) {
+            switch (proxy.type) {
+            case WKE_PROXY_HTTP:           info->proxyType = net::WebURLLoaderManager::HTTP; break;
+            case WKE_PROXY_SOCKS4:         info->proxyType = net::WebURLLoaderManager::Socks4; break;
+            case WKE_PROXY_SOCKS4A:        info->proxyType = net::WebURLLoaderManager::Socks4A; break;
+            case WKE_PROXY_SOCKS5:         info->proxyType = net::WebURLLoaderManager::Socks5; break;
+            case WKE_PROXY_SOCKS5HOSTNAME: info->proxyType = net::WebURLLoaderManager::Socks5Hostname; break;
+            }
+
+            info->hostname = String::fromUTF8(proxy.hostname);
+            info->username = String::fromUTF8(proxy.username);
+            info->password = String::fromUTF8(proxy.password);
+        }
+        return info;
+    }
+};
+
+void wkeSetProxy(const wkeProxy* proxy)
 {
-     net::WebURLLoaderManager::ProxyType proxyType = net::WebURLLoaderManager::HTTP;
-     String hostname;
-     String username;
-     String password;
- 
-     if (proxy.hostname[0] != 0 && proxy.type >= WKE_PROXY_HTTP && proxy.type <= WKE_PROXY_SOCKS5HOSTNAME) {
-         switch (proxy.type) {
-         case WKE_PROXY_HTTP:           proxyType = net::WebURLLoaderManager::HTTP; break;
-         case WKE_PROXY_SOCKS4:         proxyType = net::WebURLLoaderManager::Socks4; break;
-         case WKE_PROXY_SOCKS4A:        proxyType = net::WebURLLoaderManager::Socks4A; break;
-         case WKE_PROXY_SOCKS5:         proxyType = net::WebURLLoaderManager::Socks5; break;
-         case WKE_PROXY_SOCKS5HOSTNAME: proxyType = net::WebURLLoaderManager::Socks5Hostname; break;
-         }
- 
-         hostname = String::fromUTF8(proxy.hostname);
-         username = String::fromUTF8(proxy.username);
-         password = String::fromUTF8(proxy.password);
-     }
- 
-	 net::WebURLLoaderManager::sharedInstance()->setProxyInfo(hostname, proxy.port, proxyType, username, password);
+    if (!proxy)
+        return;
+
+    WTF::PassOwnPtr<ProxyInfo> info = ProxyInfo::create(*proxy);
+
+    if (net::WebURLLoaderManager::sharedInstance())
+        net::WebURLLoaderManager::sharedInstance()->setProxyInfo(info->hostname, proxy->port, info->proxyType, info->username, info->password);
 }
 
-WKE_API void wkeSetViewProxy(wkeWebView webView, wkeProxy *proxy) {
-	net::WebURLLoaderManager::ProxyType proxyType = net::WebURLLoaderManager::HTTP;
-	String hostname;
-	String username;
-	String password;
-
-	if (proxy->hostname[0] != 0 && proxy->type >= WKE_PROXY_HTTP && proxy->type <= WKE_PROXY_SOCKS5HOSTNAME) {
-		switch (proxy->type) {
-		case WKE_PROXY_HTTP:           proxyType = net::WebURLLoaderManager::HTTP; break;
-		case WKE_PROXY_SOCKS4:         proxyType = net::WebURLLoaderManager::Socks4; break;
-		case WKE_PROXY_SOCKS4A:        proxyType = net::WebURLLoaderManager::Socks4A; break;
-		case WKE_PROXY_SOCKS5:         proxyType = net::WebURLLoaderManager::Socks5; break;
-		case WKE_PROXY_SOCKS5HOSTNAME: proxyType = net::WebURLLoaderManager::Socks5Hostname; break;
-		}
-
-		hostname = String::fromUTF8(proxy->hostname);
-		username = String::fromUTF8(proxy->username);
-		password = String::fromUTF8(proxy->password);
-	}
-
-	webView->setProxyInfo(hostname, proxy->port, proxyType, username, password);
+void wkeSetViewProxy(wkeWebView webView, wkeProxy* proxy)
+{
+    if (!webView || !proxy)
+        return;
+    WTF::PassOwnPtr<ProxyInfo> info = ProxyInfo::create(*proxy);
+    webView->setProxyInfo(info->hostname, proxy->port, info->proxyType, info->username, info->password);
 }
+
+void wkeSetViewNetInterface(wkeWebView webView, const char* netInterface)
+{
+    if (!webView || !netInterface)
+        return;
+
+    webView->setNetInterface(netInterface);
+}
+
 void wkeConfigure(const wkeSettings* settings)
 {
     if (settings->mask & WKE_SETTING_PROXY)
-        wkeSetProxy(settings->proxy);
+        wkeSetProxy(&settings->proxy);
     if (settings->mask & WKE_SETTING_PAINTCALLBACK_IN_OTHER_THREAD)
         wkeIsUpdataInOtherThread = true;
 }
@@ -119,6 +134,26 @@ void wkeFinalize()
     if (s_versionString)
         delete s_versionString;
     s_versionString = nullptr;
+}
+
+void wkeSetMemoryCacheEnable(wkeWebView webView, bool b)
+{
+    g_wkeMemoryCacheEnable = b;
+}
+
+void wkeSetNavigationToNewWindowEnable(wkeWebView webView, bool b)
+{
+    net::g_navigationToNewWindowEnable = b;
+}
+
+void wkeSetCspCheckEnable(wkeWebView webView, bool b)
+{
+    net::g_cspCheckEnable = b;
+}
+
+void wkeSetDebugConfig(wkeWebView webView, const char* debugString)
+{
+
 }
 
 void wkeUpdate()
@@ -180,7 +215,7 @@ void wkeSetHandle(wkeWebView webView, HWND wnd)
 
 void wkeSetHandleOffset(wkeWebView webView, int x, int y)
 {
-	webView->setHandleOffset(x, y);
+    webView->setHandleOffset(x, y);
 }
 
 bool wkeIsTransparent(wkeWebView webView)
@@ -205,7 +240,7 @@ void wkeSetUserAgentW(wkeWebView webView, const wchar_t* userAgent)
 
 void wkePostURL(wkeWebView wkeView,const utf8 * url,const char *szPostData,int nLen)
 {
-	wkeView->loadPostURL(url,szPostData,nLen);
+    wkeView->loadPostURL(url,szPostData,nLen);
 }
 
 void wkePostURLW(wkeWebView wkeView,const wchar_t * url,const char *szPostData,int nLen)
@@ -438,7 +473,6 @@ const utf8* wkeGetCookie(wkeWebView webView)
     return webView->cookie();
 }
 
-
 void wkeSetCookieEnabled(wkeWebView webView, bool enable)
 {
     webView->setCookieEnabled(enable);
@@ -452,6 +486,11 @@ bool wkeIsCookieEnabled(wkeWebView webView)
 void wkeSetCookieJarPath(wkeWebView webView, const WCHAR* path)
 {
     net::setCookieJarPath(path);
+}
+
+void wkeSetCookieJarFullPath(wkeWebView webView, const WCHAR* path)
+{
+    net::setCookieJarFullPath(path);
 }
 
 void wkeSetMediaVolume(wkeWebView webView, float volume)
@@ -501,11 +540,15 @@ bool wkeFireWindowsMessage(wkeWebView webView, HWND hWnd, UINT message, WPARAM w
 
 void wkeSetFocus(wkeWebView webView)
 {
+    if (!webView)
+        return;
     webView->setFocus();
 }
 
 void wkeKillFocus(wkeWebView webView)
 {
+    if (!webView)
+        return;
     webView->killFocus();
 }
 
@@ -569,6 +612,11 @@ void wkeOnURLChanged(wkeWebView webView, wkeURLChangedCallback callback, void* c
     webView->onURLChanged(callback, callbackParam);
 }
 
+void wkeOnURLChanged2(wkeWebView webView, wkeURLChangedCallback2 callback, void* callbackParam)
+{
+    webView->onURLChanged2(callback, callbackParam);
+}
+
 void wkeOnPaintUpdated(wkeWebView webView, wkePaintUpdatedCallback callback, void* callbackParam)
 {
     webView->onPaintUpdated(callback, callbackParam);
@@ -604,6 +652,11 @@ void wkeOnDocumentReady(wkeWebView webView, wkeDocumentReadyCallback callback, v
     webView->onDocumentReady(callback, param);
 }
 
+void wkeOnDocumentReady2(wkeWebView webView, wkeDocumentReady2Callback callback, void* param)
+{
+    webView->onDocumentReady2(callback, param);
+}
+
 void wkeOnLoadingFinish(wkeWebView webView, wkeLoadingFinishCallback callback, void* param)
 {
     webView->onLoadingFinish(callback, param);
@@ -633,7 +686,6 @@ void wkeOnLoadUrlEnd(wkeWebView webView, wkeLoadUrlEndCallback callback, void* c
 {
 	webView->onLoadUrlEnd(callback, callbackParam);
 }
-
 
 void wkeOnDidCreateScriptContext(wkeWebView webView, wkeDidCreateScriptContextCallback callback, void* callbackParam)
 {
@@ -737,22 +789,22 @@ wkeWebView wkeGetWebViewForCurrentContext()
     return webview;
 }
 
-WKE_API void wkeSetUserKayValue(wkeWebView webView, const char* key, void* value)
+void wkeSetUserKeyValue(wkeWebView webView, const char* key, void* value)
 {
-    webView->setUserKayValue(key, value);
+    webView->setUserKeyValue(key, value);
 }
 
-WKE_API void* wkeGetUserKayValue(wkeWebView webView, const char* key)
+void* wkeGetUserKeyValue(wkeWebView webView, const char* key)
 {
-    return webView->getUserKayValue(key);
+    return webView->getUserKeyValue(key);
 }
 
-WKE_API int wkeGetCursorInfoType(wkeWebView webView)
+int wkeGetCursorInfoType(wkeWebView webView)
 {
     return webView->getCursorInfoType();
 }
 
-WKE_API void wkeSetDragFiles(wkeWebView webView, const POINT* clintPos, const POINT* screenPos, wkeString files[], int filesCount)
+void wkeSetDragFiles(wkeWebView webView, const POINT* clintPos, const POINT* screenPos, wkeString files[], int filesCount)
 {
     webView->setDragFiles(clintPos, screenPos, files, filesCount);
 }
@@ -882,9 +934,28 @@ const utf8* wkeVersionString()
     return wkeGetVersionString();
 }
 
-void wkeSetFileSystem(FILE_OPEN_ pfn_open, FILE_CLOSE_ pfn_close, FILE_SIZE pfn_size, FILE_READ pfn_read, FILE_SEEK pfn_seek)
+void wkeGC(wkeWebView webView, long delayMs)
 {
-    ;
+    content::BlinkPlatformImpl* platformImpl = (content::BlinkPlatformImpl*)blink::Platform::current();
+    platformImpl->startGarbageCollectedThread((double)delayMs);
+}
+
+extern "C" void curl_set_file_system(
+    WKE_FILE_OPEN pfnOpen,
+    WKE_FILE_CLOSE pfnClose,
+    WKE_FILE_SIZE pfnSize,
+    WKE_FILE_READ pfnRead,
+    WKE_FILE_SEEK pfnSeek,
+    WKE_EXISTS_FILE pfnExistsFile);
+
+WKE_FILE_OPEN g_pfnOpen = nullptr;
+WKE_FILE_CLOSE g_pfnClose = nullptr;
+
+void wkeSetFileSystem(WKE_FILE_OPEN pfnOpen, WKE_FILE_CLOSE pfnClose, WKE_FILE_SIZE pfnSize, WKE_FILE_READ pfnRead, WKE_FILE_SEEK pfnSeek)
+{
+    WKE_FILE_OPEN g_pfnOpen = pfnOpen;
+    WKE_FILE_CLOSE g_pfnClose = pfnClose;
+    curl_set_file_system(pfnOpen, pfnClose, pfnSize, pfnRead, pfnSeek, nullptr);
 }
 
 const char* wkeWebViewName(wkeWebView webView)
@@ -909,6 +980,11 @@ bool wkeIsLoadFailed(wkeWebView webView)
 bool wkeIsLoadComplete(wkeWebView webView)
 {
     return wkeIsLoadingCompleted(webView);
+}
+
+const utf8* wkeGetSource(wkeWebView webView)
+{
+    return nullptr;
 }
 
 const utf8* wkeTitle(wkeWebView webView)
@@ -953,7 +1029,7 @@ void wkeCopy(wkeWebView webView)
 
 void wkeCut(wkeWebView webView)
 {
-    wkeEditorCopy(webView);
+    wkeEditorCut(webView);
 }
 
 void wkePaste(wkeWebView webView)

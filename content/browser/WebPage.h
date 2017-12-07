@@ -111,12 +111,21 @@ public:
     void goForward();
     void didCommitProvisionalLoad(blink::WebLocalFrame* frame, const blink::WebHistoryItem& history, blink::WebHistoryCommitType type);
 
+    void setTransparent(bool transparent);
+
     HDC viewDC();
     void paintToBit(void* bits, int pitch);
+
+    void disablePaint();
+    void enablePaint();
+
+    void didStartProvisionalLoad();
+
 #if (defined ENABLE_CEF) && (ENABLE_CEF == 1)
     CefBrowserHostImpl* browser();
     void setBrowser(CefBrowserHostImpl* browserImpl);
 #endif
+
     blink::WebViewImpl* webViewImpl();
     blink::WebFrame* mainFrame();
 

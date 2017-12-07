@@ -34,6 +34,7 @@
 #include "wtf/text/CString.h"
 #include "wtf/text/CharacterNames.h"
 #include "wtf/text/StringBuilder.h"
+#include "wtf/text/WTFStringUtil.h"
 // #include <unicode/ucnv.h>
 // #include <unicode/ucnv_cb.h>
 
@@ -263,6 +264,8 @@ TextCodecICU::TextCodecICU(const TextEncoding& encoding)
     , m_needsGBKFallbacks(false)
 #endif
 {
+    memset(m_incrementalDataChunk, 0, kIncrementalDataChunkLength);
+    m_incrementalDataChunkLength = 0;
 }
 
 TextCodecICU::~TextCodecICU()
@@ -369,26 +372,89 @@ private:
 };
 #endif // MINIBLINK_NOT_IMPLEMENTED
 
-void MByteToWChar(LPCSTR lpcszStr, DWORD cbMultiByte, Vector<UChar>& out, UINT codePage)
+
+// 1）GB 18030 与 GB 2312 - 1980 和 GBK 兼容，共收录汉字70244个。
+//   1，与 UTF - 8 相同，采用多字节编码，每个字可以由 1 个、2 个或 4 个字节组成。
+//   2，编码空间庞大，最多可定义 161 万个字符。
+//   3，支持中国国内少数民族的文字，不需要动用造字区。
+//   4，汉字收录范围包含繁体汉字以及日韩汉字
+// 2）GB 18030 编码是一二四字节变长编码。
+//   1，单字节，其值从 0 到 0x7F，与 ASCII 编码兼容。
+//   2，双字节，第一个字节的值从 0x81 到 0xFE，第二个字节的值从 0x40 到 0xFE（不包括0x7F），与 GBK 标准兼容。
+//   四字节，第一个字节的值从 0x81 到 0xFE，第二个字节的值从 0x30 到 0x39，第三个字节从0x81 到 0xFE，第四个字节从 0x30 到 0x39。
+bool isValideGB(const unsigned char* str, int length)
 {
-    DWORD dwMinSize;
-    dwMinSize = MultiByteToWideChar(codePage, 0, lpcszStr, cbMultiByte, NULL, 0);
+    if (1 == length) {
+        unsigned char c = str[0];
+        return c >= 0 && c <= 0x7f;
+    }
 
-    out.resize(dwMinSize);
+    if (2 == length) {
+        unsigned char c1 = str[0];
+        unsigned char c2 = str[1];
+        return (c1 >= 0x81 && c1 <= 0xFE) && (c2 >= 0x40 && c2 <= 0xFE);
+    }
 
-    // Convert headers from ASCII to Unicode.
-    MultiByteToWideChar(codePage, 0, lpcszStr, cbMultiByte, out.data(), dwMinSize);
+    if (4 == length) {
+        unsigned char c1 = str[0];
+        unsigned char c2 = str[1];
+        unsigned char c3 = str[2];
+        unsigned char c4 = str[3];
+        return (c1 >= 0x81 && c1 <= 0xFE) && (c2 >= 0x30 && c2 <= 0x39) && (c3 >= 0x81 && c3 <= 0xFE) && (c4 >= 0x30 && c4 <= 0x39);
+    }
+
+    return false;
 }
 
-void WCharToMByte(LPCWSTR lpWideCharStr, DWORD cchWideChar, Vector<char>& out, UINT codePage)
+static Vector<UChar> decodeGbkWithLastData(char* data, int len, char* lastData, int* lastLength)
 {
-    DWORD dwMinSize;
-    dwMinSize = WideCharToMultiByte(codePage, 0, lpWideCharStr, cchWideChar, NULL, 0, NULL, FALSE);
+    std::string valideBytes;
+    valideBytes.resize(len + *lastLength);
 
-    out.resize(dwMinSize);
+    char* buffer = &valideBytes[0];
+    memcpy(buffer, lastData, *lastLength);
+    memcpy(buffer + *lastLength, data, len);
 
-    // Convert headers from ASCII to Unicode.
-    WideCharToMultiByte(codePage, 0, lpWideCharStr, cchWideChar, out.data(), dwMinSize, NULL, FALSE);
+    *lastLength = 0;
+    int size = valideBytes.size();
+
+    int i = 0;
+    for (i = 0; i < size; i++) {
+        unsigned char c = buffer[0];
+        if (c < 0x80 || c == 0xA0) {
+            continue;
+        }
+        if ((i + 1) < size) {
+            i++;
+        } else {
+            break;
+        }
+    }
+
+    // 考虑兼容4字节， 用 MB_ERR_INVALID_CHARS 标志是用来报告错误
+    int size2 = MultiByteToWideChar(54936, MB_ERR_INVALID_CHARS, buffer, i, NULL, 0);
+    if (size2 <= 0) {
+        if (i < size) {
+            // 失败， 末尾有可能是 4字节截断
+            // 也有可能中间有乱码， 这样，我们再回退2字节不会更坏吧？
+            if (i >= 2) {
+                unsigned char c = buffer[i - 2];
+                if (c >= 0x80 && c != 0xA0) {
+                    i -= 2;
+                }
+            }
+        }
+        size2 = MultiByteToWideChar(54936, 0, buffer, i, NULL, 0);
+    }
+    *lastLength = size - i;
+    memcpy(lastData, buffer + i, *lastLength);
+    size2 = MultiByteToWideChar(54936, 0, buffer, i, NULL, 0);
+
+    Vector<UChar> result;
+    result.resize(size2);
+    if (size2> 0)
+        MultiByteToWideChar(54936, 0, buffer, i, &result[0], size2);
+    return result;
 }
 
 String TextCodecICU::decode(const char* bytes, size_t length, FlushBehavior flush, bool stopOnError, bool& sawError)
@@ -453,9 +519,30 @@ String TextCodecICU::decode(const char* bytes, size_t length, FlushBehavior flus
     if (strcasecmp(m_encoding.name(), "gb2312") && strcasecmp(m_encoding.name(), "GBK"))
         return String();
 
-    MByteToWChar(bytes, length, resultBuffer, CP_ACP);
-    return String(resultBuffer);
-    
+    if (0 == length)
+        return String();
+
+    Vector<char> valideBytes;
+
+    valideBytes.resize(length + m_incrementalDataChunkLength);
+    memcpy(valideBytes.data(), m_incrementalDataChunk, m_incrementalDataChunkLength);
+    memcpy(valideBytes.data() + m_incrementalDataChunkLength, bytes, length);
+
+    m_incrementalDataChunkLength = 0;
+    const unsigned char* lastInvalideChar = (const unsigned char*)bytes + length - 1;
+#if 0
+    if (length > 2 && !isValideGB(lastInvalideChar, 1) && !isValideGB(lastInvalideChar - 1, 2)) {
+        m_incrementalDataChunkLength = 1; // 目前不支持GB-18030四字节编码
+        m_incrementalDataChunk[0] = *lastInvalideChar;
+    }
+
+    WTF::MByteToWChar(valideBytes.data(), valideBytes.size() - m_incrementalDataChunkLength, &resultBuffer, CP_ACP);
+    if (0 == resultBuffer.size())
+        return String();
+#else
+    resultBuffer = decodeGbkWithLastData(valideBytes.data(), valideBytes.size(), m_incrementalDataChunk, &m_incrementalDataChunkLength);
+#endif
+    return String(&resultBuffer[0], resultBuffer.size());
 #endif // MINIBLINK_NOT_IMPLEMENTED
 }
 
@@ -640,12 +727,14 @@ CString TextCodecICU::encode(const UChar* characters, size_t length, Unencodable
 #ifdef MINIBLINK_NOT_IMPLEMENTED
     return encodeCommon(characters, length, handling);
 #else
-    Vector<char> resultBuffer;
+    std::vector<char> resultBuffer;
     if (strcasecmp(m_encoding.name(), "gb2312") && strcasecmp(m_encoding.name(), "GBK"))
         return CString();
 
-    WCharToMByte(characters, length, resultBuffer, CP_ACP);
-    return CString(resultBuffer.data(), resultBuffer.size());
+    WCharToMByte(characters, length, &resultBuffer, CP_ACP);
+    if (0 == resultBuffer.size())
+        return CString();
+    return CString(&resultBuffer[0], resultBuffer.size());
 #endif // MINIBLINK_NOT_IMPLEMENTED
 }
 

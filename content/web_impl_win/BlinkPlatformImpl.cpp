@@ -11,7 +11,9 @@
 #include "content/web_impl_win/WebBlobRegistryImpl.h"
 #include "content/web_impl_win/WebClipboardImpl.h"
 #include "content/web_impl_win/WebFileUtilitiesImpl.h"
+#include "content/web_impl_win/WaitableEvent.h"
 #include "content/web_impl_win/npapi/WebPluginImpl.h"
+#include "content/web_impl_win/npapi/PluginDatabase.h"
 #include "content/resources/MissingImageData.h"
 #include "content/resources/TextAreaResizeCornerData.h"
 #include "content/resources/LocalizedString.h"
@@ -25,6 +27,7 @@
 #include "third_party/WebKit/Source/web/WebStorageNamespaceImpl.h"
 #include "third_party/WebKit/public/platform/WebScrollbarBehavior.h"
 #include "third_party/WebKit/public/platform/WebPluginListBuilder.h"
+#include "third_party/WebKit/Source/platform/plugins/PluginData.h"
 #include "third_party/WebKit/Source/platform/PartitionAllocMemoryDumpProvider.h"
 #include "third_party/WebKit/Source/platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "third_party/WebKit/Source/bindings/core/v8/V8GCController.h"
@@ -54,7 +57,6 @@ class CallAddrsRecord;
 CallAddrsRecord* g_callAddrsRecord = nullptr;
 
 extern std::set<void*>* g_activatingStyleFetchedImage;
-extern std::set<void*>* g_activatingIncrementLoadEventDelayCount;
 
 typedef void* (__cdecl * MyFree)(void*);
 MyFree myFree = nullptr;
@@ -136,7 +138,8 @@ void BlinkPlatformImpl::initialize()
     scrt_initialize_thread_safe_statics();
 #endif
     x86_check_features();
-    ::CoInitializeEx(NULL, 0); // COINIT_MULTITHREADED
+    ::CoInitializeEx(nullptr, 0); // COINIT_MULTITHREADED
+    ::OleInitialize(nullptr);
 
     setRuntimeEnabledFeatures();
 
@@ -154,7 +157,7 @@ void BlinkPlatformImpl::initialize()
     const size_t kImageCacheSingleAllocationByteLimit = 64 * 1024 * 1024;
     SkGraphics::SetResourceCacheSingleAllocationByteLimit(kImageCacheSingleAllocationByteLimit);
 
-    platform->startGarbageCollectedThread();
+    platform->startGarbageCollectedThread(30000);
 
     OutputDebugStringW(L"BlinkPlatformImpl::initBlink\n");
 }
@@ -170,10 +173,12 @@ BlinkPlatformImpl::BlinkPlatformImpl()
     m_localStorageStorageMap = nullptr;
     m_sessionStorageStorageMap = nullptr;
     m_webFileUtilitiesImpl = nullptr;
+    m_blobRegistryImpl = nullptr;
     m_userAgent = nullptr;
     m_storageNamespaceIdCount = 1;
     m_lock = new CRITICAL_SECTION();
     m_threadNum = 0;
+    m_gcTimer = nullptr;
     m_ioThread = nullptr;
     m_firstMonotonicallyIncreasingTime = currentTimeImpl(); // (GetTickCount() / 1000.0);
     ::InitializeCriticalSection(m_lock);
@@ -255,8 +260,12 @@ void BlinkPlatformImpl::preShutdown()
 
 void BlinkPlatformImpl::shutdown()
 {
+    ((WebThreadImpl*)currentThread())->fire();
+
     net::WebURLLoaderManager::sharedInstance()->shutdown();
     WebPage::shutdown();
+
+    ((WebThreadImpl*)currentThread())->fire();
 
     blink::memoryCache()->evictResources();
     v8::Isolate::GetCurrent()->LowMemoryNotification();
@@ -272,6 +281,8 @@ void BlinkPlatformImpl::shutdown()
 
     MemoryCache* memoryCache = MemoryCache::create();
     replaceMemoryCacheForTesting(memoryCache);
+
+    ((WebThreadImpl*)currentThread())->fire();
 
     blink::Heap::collectAllGarbage();
 
@@ -295,8 +306,9 @@ void BlinkPlatformImpl::shutdown()
 #ifdef _DEBUG
     if (blink::g_activatingImageLoader && !blink::g_activatingImageLoader->empty() ||
         // blink::g_activatingFontFallbackList && !blink::g_activatingFontFallbackList->empty() ||
-        g_activatingStyleFetchedImage && !g_activatingStyleFetchedImage->empty() ||
-        g_activatingIncrementLoadEventDelayCount && !g_activatingIncrementLoadEventDelayCount->empty())
+        g_activatingStyleFetchedImage && !g_activatingStyleFetchedImage->empty() 
+        // || g_activatingIncrementLoadEventDelayCount && !g_activatingIncrementLoadEventDelayCount->empty()
+        )
         DebugBreak();
 #endif
 
@@ -317,8 +329,16 @@ void BlinkPlatformImpl::shutdown()
     delete this;
 }
 
+void BlinkPlatformImpl::garbageCollectedTimer(blink::Timer<BlinkPlatformImpl>*)
+{
+    doGarbageCollected();
+    m_gcTimer->stop();
+    m_gcTimer->startOneShot(30000, FROM_HERE);
+}
+
 void BlinkPlatformImpl::doGarbageCollected()
 {
+    blink::memoryCache()->evictResources();
     //net::gActivatingLoaderCheck->doGarbageCollected(false);
     //blink::memoryCache()->evictResources();
     //Heap::collectGarbage(ThreadState::HeapPointersOnStack, ThreadState::GCWithSweep, Heap::ForcedGC);
@@ -326,16 +346,19 @@ void BlinkPlatformImpl::doGarbageCollected()
     //     v8::Isolate::GetCurrent()->IdleNotificationDeadline(currentMonotonicallyTime + 0.1);
     //     v8::Isolate::GetCurrent()->ContextDisposedNotification(false);
     SkGraphics::PurgeResourceCache();
-
-    mainThread()->postDelayedTask(FROM_HERE, WTF::bind(&BlinkPlatformImpl::doGarbageCollected, this), 30000);
+    SkGraphics::PurgeFontCache();
 
 //     String out = String::format("BlinkPlatformImpl::doGarbageCollected: %d %d %d\n", g_v8MemSize, g_blinkMemSize, g_skiaMemSize);
 //     OutputDebugStringA(out.utf8().data());
 }
 
-void BlinkPlatformImpl::startGarbageCollectedThread()
+void BlinkPlatformImpl::startGarbageCollectedThread(double delayMs)
 {
-    mainThread()->postDelayedTask(FROM_HERE, WTF::bind(&BlinkPlatformImpl::doGarbageCollected, this), 30000);
+    if (!m_gcTimer)
+        m_gcTimer = new blink::Timer<BlinkPlatformImpl>(this, &BlinkPlatformImpl::garbageCollectedTimer);
+
+    m_gcTimer->stop();
+    m_gcTimer->startOneShot(delayMs, FROM_HERE);
 }
 
 void BlinkPlatformImpl::closeThread()
@@ -409,14 +432,14 @@ blink::WebThread* BlinkPlatformImpl::currentThread()
 
 blink::WebThread* BlinkPlatformImpl::tryGetIoThread() const
 {
-	return m_ioThread;
+    return m_ioThread;
 }
 
 blink::WebThread* BlinkPlatformImpl::ioThread()
 {
-	if (!m_ioThread)
-		m_ioThread = createThread("ioThread");
-	return m_ioThread;
+    if (!m_ioThread)
+        m_ioThread = createThread("ioThread");
+    return m_ioThread;
 }
 
 void BlinkPlatformImpl::cryptographicallyRandomValues(unsigned char* buffer, size_t length)
@@ -426,8 +449,8 @@ void BlinkPlatformImpl::cryptographicallyRandomValues(unsigned char* buffer, siz
 
 blink::WebURLLoader* BlinkPlatformImpl::createURLLoader()
 {
-    //return new content::WebURLLoaderImpl();
-    return new content::WebURLLoaderImplCurl();
+   //return new content::WebURLLoaderImpl();
+   return new content::WebURLLoaderImplCurl();
 }
 
 const unsigned char* BlinkPlatformImpl::getTraceCategoryEnabledFlag(const char* categoryName)
@@ -567,10 +590,11 @@ blink::WebScrollbarBehavior* BlinkPlatformImpl::scrollbarBehavior()
 blink::WebURLError BlinkPlatformImpl::cancelledError(const blink::WebURL& url) const
 {
     blink::WebURLError error;
-    error.reason = -1;
+    error.reason = -3; // net::ERR_ABORTED
     error.domain = blink::WebString(url.string());
     error.localizedDescription = blink::WebString::fromUTF8("url cancelledError\n");
-
+    error.isCancellation = true;
+    error.staleCopyInCache = false;
     WTF::String outError = "url cancelledError:";
     outError.append((WTF::String)url.string());
     outError.append("\n");
@@ -583,14 +607,14 @@ blink::WebStorageNamespace* BlinkPlatformImpl::createLocalStorageNamespace()
 {
     if (!m_localStorageStorageMap)
         m_localStorageStorageMap = new DOMStorageMapWrap();
-    return new blink::WebStorageNamespaceImpl(blink::kLocalStorageNamespaceId, m_localStorageStorageMap->map);
+    return new blink::WebStorageNamespaceImpl(blink::kLocalStorageNamespaceId, &m_localStorageStorageMap->map, true);
 }
 
 blink::WebStorageNamespace* BlinkPlatformImpl::createSessionStorageNamespace()
 {
     if (!m_sessionStorageStorageMap)
         m_sessionStorageStorageMap = new DOMStorageMapWrap();
-    return new blink::WebStorageNamespaceImpl(m_storageNamespaceIdCount++, m_sessionStorageStorageMap->map);
+    return new blink::WebStorageNamespaceImpl(m_storageNamespaceIdCount++, &m_sessionStorageStorageMap->map, false);
 }
 
 bool BlinkPlatformImpl::portAllowed(const blink::WebURL&) const
@@ -617,7 +641,9 @@ blink::WebString BlinkPlatformImpl::queryLocalizedString(blink::WebLocalizedStri
 // Blob ----------------------------------------------------------------
 blink::WebBlobRegistry* BlinkPlatformImpl::blobRegistry()
 {
-    return new WebBlobRegistryImpl();
+    if (!m_blobRegistryImpl)
+        m_blobRegistryImpl = new WebBlobRegistryImpl();
+    return m_blobRegistryImpl;
 }
 
 // clipboard ----------------------------------------------------------------
@@ -632,9 +658,33 @@ blink::WebClipboard* BlinkPlatformImpl::clipboard()
 // Plugins -------------------------------------------------------------
 void BlinkPlatformImpl::getPluginList(bool refresh, blink::WebPluginListBuilder* builder)
 {
-    builder->addPlugin(blink::WebString::fromUTF8("flash"), blink::WebString::fromUTF8("flashPlugin"), blink::WebString::fromUTF8(".swf"));
-    builder->addMediaTypeToLastPlugin(blink::WebString::fromUTF8("application/x-shockwave-flash"), blink::WebString::fromUTF8("flashPlugin"));
-    builder->addFileExtensionToLastMediaType(blink::WebString::fromUTF8(".swf"));
+//     builder->addPlugin(blink::WebString::fromUTF8("Shockwave Flash"), blink::WebString::fromUTF8("flashPlugin"), blink::WebString::fromUTF8(".swf"));
+//     builder->addMediaTypeToLastPlugin(blink::WebString::fromUTF8("application/x-shockwave-flash"), blink::WebString::fromUTF8("flashPlugin"));
+//     builder->addFileExtensionToLastMediaType(blink::WebString::fromUTF8(".swf"));
+
+    const Vector<PluginPackage*>& plugins = PluginDatabase::installedPlugins()->plugins();
+
+    for (size_t i = 0; i < plugins.size(); ++i) {
+        PluginPackage* package = plugins[i];
+        String name = package->name();
+        String desc = package->description();
+        String file = package->fileName();
+        builder->addPlugin(name, desc, file);
+
+        const MIMEToDescriptionsMap& mimeToDescriptions = package->mimeToDescriptions();
+        MIMEToDescriptionsMap::const_iterator end = mimeToDescriptions.end();
+
+        for (MIMEToDescriptionsMap::const_iterator it = mimeToDescriptions.begin(); it != end; ++it) {
+            String type = it->key;
+            String desc = it->value;
+            builder->addMediaTypeToLastPlugin(type, desc);
+
+            Vector<String> extensions = package->mimeToExtensions().get(type);
+            for (size_t j = 0; j < extensions.size(); ++j) {
+                builder->addFileExtensionToLastMediaType(extensions[j]);
+            }
+        }
+    }
 }
 
 blink::WebFileUtilities* BlinkPlatformImpl::fileUtilities()
@@ -642,6 +692,24 @@ blink::WebFileUtilities* BlinkPlatformImpl::fileUtilities()
     if (!m_webFileUtilitiesImpl)
         m_webFileUtilitiesImpl = new WebFileUtilitiesImpl();
     return m_webFileUtilitiesImpl;
+}
+
+// WaitableEvent -------------------------------------------------------
+
+WebWaitableEvent* BlinkPlatformImpl::createWaitableEvent(blink::WebWaitableEvent::ResetPolicy policy, blink::WebWaitableEvent::InitialState state)
+{
+    return new WaitableEvent(policy == blink::WebWaitableEvent::ResetPolicy::Manual, state == blink::WebWaitableEvent::InitialState::Signaled);
+}
+
+WebWaitableEvent* BlinkPlatformImpl::waitMultipleEvents(const blink::WebVector<blink::WebWaitableEvent*>& webEvents)
+{
+    Vector<WaitableEvent*> events;
+    for (size_t i = 0; i < webEvents.size(); ++i)
+        events.append((WaitableEvent*)(webEvents[i]));
+
+    size_t idx = WaitableEvent::waitMany(events.data(), events.size());
+    ASSERT(idx < webEvents.size());
+    return webEvents[idx];
 }
 
 } // namespace content

@@ -9,8 +9,10 @@
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
 
 #include "cc/trees/LayerTreeHost.h"
-//#include "cc/trees/LayerTreeHostUiThreadClient.h"
+#include "cc/trees/LayerTreeHostClient.h"
 #include "skia/ext/platform_canvas.h"
+
+#include "content/browser/PopupMenuWinClient.h"
 
 namespace cc {
 class LayerTreeHost;
@@ -38,8 +40,13 @@ class WebPage;
 class PlatformEventHandler;
 class NavigationController;
 class PopupMenuWin;
+class ToolTip;
 
-class WebPageImpl : public blink::WebViewClient, public cc::LayerTreeHostUiThreadClient {
+class WebPageImpl 
+    : public blink::WebViewClient
+    , public cc::LayerTreeHostUiThreadClient
+    , public cc::LayerTreeHostClent
+    , public PopupMenuWinClient {
 public:
     WebPageImpl();
     ~WebPageImpl();
@@ -58,34 +65,46 @@ public:
         const blink::WebWindowFeatures& features,
         const blink::WebString& name,
         blink::WebNavigationPolicy policy,
-        bool suppressOpener) OVERRIDE;
+        bool suppressOpener) override;
 
     void init(WebPage* pagePtr, HWND hWnd);
     void close();
     
     // WebViewClient
-    virtual void didInvalidateRect(const blink::WebRect&) OVERRIDE;
-    virtual void didAutoResize(const blink::WebSize& newSize) OVERRIDE;
-    virtual void didUpdateLayout() OVERRIDE;
-    virtual void didUpdateLayoutSize(const blink::WebSize& newSize) OVERRIDE;
-    virtual void scheduleAnimation() OVERRIDE;
-    virtual void initializeLayerTreeView() OVERRIDE;
-    virtual blink::WebWidget* createPopupMenu(blink::WebPopupType) OVERRIDE;
-    virtual blink::WebStorageNamespace* createSessionStorageNamespace() OVERRIDE;
-    virtual blink::WebString acceptLanguages() OVERRIDE;
-    virtual blink::WebScreenInfo screenInfo() OVERRIDE;
+    virtual void didInvalidateRect(const blink::WebRect&) override;
+    virtual void didAutoResize(const blink::WebSize& newSize) override;
+    virtual void didUpdateLayout() override;
+    virtual void didUpdateLayoutSize(const blink::WebSize& newSize) override;
+    virtual void scheduleAnimation() override;
+    virtual void initializeLayerTreeView() override;
+    virtual blink::WebWidget* createPopupMenu(blink::WebPopupType) override;
+    virtual blink::WebStorageNamespace* createSessionStorageNamespace() override;
+    virtual blink::WebString acceptLanguages() override;
+    virtual blink::WebScreenInfo screenInfo() override;
 
-	//zzs
-	virtual float deviceScaleFactor();
+    virtual void setToolTipText(const blink::WebString&, blink::WebTextDirection hint) override;
 
     // Editing --------------------------------------------------------
-    virtual bool handleCurrentKeyboardEvent() OVERRIDE;
+    virtual bool handleCurrentKeyboardEvent() override;
 
     // Return a compositing view used for this widget. This is owned by the
     // WebWidgetClient.
-    virtual blink::WebLayerTreeView* layerTreeView() OVERRIDE;
-    virtual void didChangeCursor(const blink::WebCursorInfo&) OVERRIDE;
+    virtual blink::WebLayerTreeView* layerTreeView() override;
+    virtual void didChangeCursor(const blink::WebCursorInfo&) override;
     virtual void closeWidgetSoon() override;
+
+    // LayerTreeHostClent --------------------------------------------------------
+    virtual void onLayerTreeDirty() override;
+    virtual void onLayerTreeInvalidateRect(const blink::IntRect& r) override;
+    virtual void onLayerTreeSetNeedsCommit() override;
+    virtual void disablePaint() override;
+    virtual void enablePaint() override;
+
+    void didStartProvisionalLoad();
+
+    // PopupMenuWinClient --------------------------------------------------------
+    virtual void onPopupMenuCreate(HWND hWnd) override;
+    virtual void onPopupMenuHide() override;
     
     void testPaint();
 
@@ -127,8 +146,8 @@ public:
     void setNeedsCommitAndNotLayout();
     void clearNeedsCommit();
     bool isDrawDirty();
-    void onLayerTreeDirty();
 
+    // LayerTreeHostUiThreadClient --------------------------------------------------------
     virtual void paintToMemoryCanvasInUiThread(SkCanvas* canvas, const blink::IntRect& paintRect) override;
     
     cc::LayerTreeHost* layerTreeHost() { return m_layerTreeHost; }
@@ -137,6 +156,8 @@ public:
     void loadURL(int64 frameId, const wchar_t* url, const blink::Referrer& referrer, const wchar_t* extraHeaders);
     void loadRequest(int64 frameId, const blink::WebURLRequest& request);
     void loadHTMLString(int64 frameId, const blink::WebData& html, const blink::WebURL& baseURL, const blink::WebURL& unreachableURL, bool replace);
+
+    void setTransparent(bool transparent);
 
     // Session history -----------------------------------------------------
     void didCommitProvisionalLoad(blink::WebLocalFrame* frame, const blink::WebHistoryItem& history, blink::WebHistoryCommitType type);
@@ -171,7 +192,9 @@ public:
 
     void copyToMemoryCanvasForUi();
 
-    bool m_useLayeredBuffer;
+    friend class AutoRecordActions;
+
+    ToolTip* m_toolTip;
 
     blink::IntRect m_winodwRect;
 
@@ -225,9 +248,12 @@ public:
     int m_commitCount;
     int m_needsLayout;
     int m_layerDirty;
+    int m_executeMainFrameCount;
     double m_lastFrameTimeMonotonic;
 
     SkCanvas* m_memoryCanvasForUi;
+    bool m_disablePaint;
+    int m_firstDrawCount;
 
     blink::Persistent<PopupMenuWin> m_popup;
 };

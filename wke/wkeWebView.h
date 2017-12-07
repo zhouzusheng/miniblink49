@@ -6,6 +6,7 @@
 
 //cexer: 必须包含在后面，因为其中的 windows.h 会定义 max、min，导致 WebCore 内部的 max、min 出现错乱。
 #include "wke/wkeString.h"
+#include "wke/wkeJsBindFreeTempObject.h"
 #include "third_party/WebKit/Source/platform/geometry/IntRect.h"
 #include "net/WebURLLoaderManager.h"
 #include <map>
@@ -24,6 +25,9 @@ struct CWebViewHandler {
 
     wkeURLChangedCallback urlChangedCallback;
     void* urlChangedCallbackParam;
+
+    wkeURLChangedCallback2 urlChangedCallback2;
+    void* urlChangedCallback2Param;
 
     wkePaintUpdatedCallback paintUpdatedCallback;
     void* paintUpdatedCallbackParam;
@@ -46,11 +50,14 @@ struct CWebViewHandler {
     wkeDocumentReadyCallback documentReadyCallback;
     void* documentReadyCallbackParam;
 
+    wkeDocumentReady2Callback documentReady2Callback;
+    void* documentReady2CallbackParam;
+
     wkeLoadingFinishCallback loadingFinishCallback;
     void* loadingFinishCallbackParam;
 
-	wkeDownloadCallback downloadCallback;
-	void* downloadCallbackParam;
+    wkeDownloadCallback downloadCallback;
+    void* downloadCallbackParam;
 
     wkeConsoleCallback consoleCallback;
     void* consoleCallbackParam;
@@ -58,11 +65,11 @@ struct CWebViewHandler {
     wkeCallUiThread callUiThreadCallback;
     void* callUiThreadCallbackParam;
     
-	wkeLoadUrlBeginCallback loadUrlBeginCallback;
-	void* loadUrlBeginCallbackParam;
+    wkeLoadUrlBeginCallback loadUrlBeginCallback;
+    void* loadUrlBeginCallbackParam;
 
-	wkeLoadUrlEndCallback loadUrlEndCallback;
-	void* loadUrlEndCallbackParam;
+    wkeLoadUrlEndCallback loadUrlEndCallback;
+    void* loadUrlEndCallbackParam;
 
     wkeDidCreateScriptContextCallback didCreateScriptContextCallback;
     void* didCreateScriptContextCallbackParam;
@@ -70,7 +77,13 @@ struct CWebViewHandler {
     wkeWillReleaseScriptContextCallback willReleaseScriptContextCallback;
     void* willReleaseScriptContextCallbackParam;
 
-	bool isWke;//是否是使用的wke接口
+    wkeWindowClosingCallback m_windowClosingCallback;
+    void* m_windowClosingCallbackParam;
+    
+    wkeWindowDestroyCallback m_windowDestroyCallback;
+    void* m_windowDestroyCallbackParam;
+
+    bool isWke;//是否是使用的wke接口
 };
 
 class CWebView : public IWebView {
@@ -104,7 +117,7 @@ public:
 
     const utf8* url() const override;
 
-	void setUserAgent(const utf8 * useragent);
+	  void setUserAgent(const utf8 * useragent);
     void setUserAgent(const wchar_t * useragent);
 
     bool isLoading() const;
@@ -135,11 +148,11 @@ public:
     void layoutIfNeeded() override;
     void paint(void* bits, int pitch) override;
     void paint(void* bits, int bufWid, int bufHei, int xDst, int yDst, int w, int h, int xSrc, int ySrc, bool fKeepAlpha);
-	void repaintIfNeeded();
+    void repaintIfNeeded();
     HDC viewDC();
     HWND windowHandle() const;
-	void setHandle(HWND wnd);
-	void setHandleOffset(int x, int y);
+    void setHandle(HWND wnd);
+    void setHandleOffset(int x, int y);
     bool canGoBack() const override;
     bool goBack() override;
     bool canGoForward() const override;
@@ -193,6 +206,7 @@ public:
     void setEditable(bool editable) override;
     
     void onURLChanged(wkeURLChangedCallback callback, void* callbackParam);
+    void onURLChanged2(wkeURLChangedCallback2 callback, void* callbackParam);
     void onTitleChanged(wkeTitleChangedCallback callback, void* callbackParam);
     virtual void onPaintUpdated(wkePaintUpdatedCallback callback, void* callbackParam);
 
@@ -205,7 +219,8 @@ public:
 
     virtual void onLoadingFinish(wkeLoadingFinishCallback callback, void* callbackParam);
     virtual void onDocumentReady(wkeDocumentReadyCallback callback, void* callbackParam);
-	virtual void onDownload(wkeDownloadCallback callback, void* callbackParam);
+    void onDocumentReady2(wkeDocumentReady2Callback callback, void* callbackParam);
+    virtual void onDownload(wkeDownloadCallback callback, void* callbackParam);
     virtual void onConsole(wkeConsoleCallback callback, void* callbackParam);
     virtual void onCallUiThread(wkeCallUiThread callback, void* callbackParam);
     
@@ -218,16 +233,23 @@ public:
     void setClientHandler(const wkeClientHandler* handler) override;
     const wkeClientHandler* getClientHandler() const override;
 
+    CWebViewHandler* getWkeHandler() const;
+
     content::WebPage* webPage() { return m_webPage; }
 
-    void setUserKayValue(const char* key, void* value);
-    void* getUserKayValue(const char* key);
+    void setUserKeyValue(const char* key, void* value);
+    void* getUserKeyValue(const char* key);
 
     int getCursorInfoType();
 
     void setDragFiles(const POINT* clintPos, const POINT* screenPos, wkeString files[], int filesCount);
 
-	void setProxyInfo(const String& host, unsigned long port, net::WebURLLoaderManager::ProxyType type, const String& username, const String& password);
+    void setNetInterface(const char* netInterface);
+    String getNetInterface() const { return m_netInterface; }
+
+    void setProxyInfo(const String& host, unsigned long port, net::WebURLLoaderManager::ProxyType type, const String& username, const String& password);
+    String getProxy() const { return m_proxy; }
+    net::WebURLLoaderManager::ProxyType getProxyType() const { return m_proxyType; }
 
 protected:
     HWND m_hWnd;
@@ -235,7 +257,9 @@ protected:
     void _initPage();
     void _initMemoryDC();
 
-    std::map<std::string, void*> m_userKayValues;
+    void _loadURL(const utf8* inUrl, bool isFile);
+
+    std::map<std::string, void*> m_userKeyValues;
 
     //按理这些接口应该使用CWebView来实现的，可以把它们想像成一个类，因此设置为友员符合情理。
 //     friend class ToolTip;
@@ -254,6 +278,7 @@ protected:
     wke::CString m_cookie;
     wke::CString m_name;
     bool m_transparent;
+    bool m_isCokieEnabled;
 
     int m_width;
     int m_height;
@@ -267,9 +292,11 @@ protected:
     //void* m_pixels;
 
     bool m_awake;
-public:
-	String m_proxy;
-	net::WebURLLoaderManager::ProxyType m_proxyType;
+
+    String m_netInterface;
+
+    String m_proxy;
+    net::WebURLLoaderManager::ProxyType m_proxyType;
 };
 
 };//namespace wke

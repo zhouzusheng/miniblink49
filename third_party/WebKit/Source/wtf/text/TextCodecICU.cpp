@@ -420,7 +420,7 @@ static Vector<UChar> decodeGbkWithLastData(char* data, int len, char* lastData, 
 
     int i = 0;
     for (i = 0; i < size; i++) {
-        unsigned char c = buffer[0];
+        unsigned char c = buffer[i];
         if (c < 0x80 || c == 0xA0) {
             continue;
         }

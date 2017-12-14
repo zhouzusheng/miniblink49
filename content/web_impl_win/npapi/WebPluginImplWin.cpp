@@ -263,12 +263,13 @@ LRESULT WebPluginImpl::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
             break;
     }
 
-    if (message == m_lastMessage &&
+	//zzs
+	if (message == m_lastMessage && m_plugin &&
         m_plugin->quirks().contains(PluginQuirkDontCallWndProcForSameMessageRecursively) && 
         m_isCallingPluginWndProc)
         return 1;
 
-    if (message == WM_USER + 1 &&
+	if (message == WM_USER + 1 && m_plugin &&
         m_plugin->quirks().contains(PluginQuirkThrottleWMUserPlusOneMessages)) {
         if (!m_messageThrottler)
             m_messageThrottler = adoptPtr(new PluginMessageThrottlerWin(this));
@@ -284,7 +285,10 @@ LRESULT WebPluginImpl::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
     // popups for all user gestures.
     // Note that we need to pop the state in a timer, because the Flash plug-in 
     // pops up windows in response to a posted message.
-    if (m_plugin->pluginFuncs()->version < NPVERS_HAS_POPUPS_ENABLED_STATE &&
+	
+	//zzs
+	// why m_plugin maybe null ? I dont know, so I add an test m_plugin!= NULL
+	if (m_plugin && m_plugin->pluginFuncs()->version < NPVERS_HAS_POPUPS_ENABLED_STATE &&
         isWindowsMessageUserGesture(message) && !m_popPopupsStateTimer.isActive()) {
 
         pushPopupsEnabledState(true);
@@ -379,7 +383,9 @@ bool WebPluginImpl::dispatchNPEvent(NPEvent& npEvent)
 
     bool shouldPop = false;
 
-    if (m_plugin->pluginFuncs()->version < NPVERS_HAS_POPUPS_ENABLED_STATE && isWindowsMessageUserGesture(npEvent.event)) {
+	//zzs
+	// why m_plugin maybe null ? I dont know, so I add an test m_plugin!= NULL
+	if (m_plugin && m_plugin->pluginFuncs()->version < NPVERS_HAS_POPUPS_ENABLED_STATE && isWindowsMessageUserGesture(npEvent.event)) {
         pushPopupsEnabledState(true);
         shouldPop = true;
     }
@@ -844,7 +850,9 @@ void WebPluginImpl::setNPWindowRect(const IntRect& rect)
     m_npWindow.clipRect.left = 0;
     m_npWindow.clipRect.top = 0;
 
-    if (m_plugin->pluginFuncs()->setwindow) {
+	//zzs
+	// why m_plugin maybe null ? I dont know, so I add an test m_plugin!= NULL
+    if (m_plugin && m_plugin->pluginFuncs()->setwindow) {
         //JSC::JSLock::DropAllLocks dropAllLocks(JSDOMWindowBase::commonVM());
         setCallingPlugin(true);
         m_plugin->pluginFuncs()->setwindow(m_instance, &m_npWindow);
@@ -951,7 +959,9 @@ void WebPluginImpl::invalidateRect(NPRect* rect)
         RECT invalidRect = { r.x(), r.y(), r.maxX(), r.maxY() };
         ::InvalidateRect(platformPluginWidget(), &invalidRect, FALSE);
     } else {
-        if (m_plugin->quirks().contains(PluginQuirkThrottleInvalidate)) {
+		//zzs
+		// why m_plugin maybe null ? I dont know, so I add an test m_plugin!= NULL
+		if (m_plugin && m_plugin->quirks().contains(PluginQuirkThrottleInvalidate)) {
             m_invalidRects.append(r);
             if (!m_invalidateTimer.isActive())
                 m_invalidateTimer.startOneShot(0.001, FROM_HERE);
@@ -1023,7 +1033,9 @@ void WebPluginImpl::platformStartAsyn(blink::Timer<WebPluginImpl>*)
     
     updatePluginWidget(m_windowRect, m_clipRect);
 
-    if (!m_plugin->quirks().contains(PluginQuirkDeferFirstSetWindowCall))
+	//zzs
+	// why m_plugin maybe null ? I dont know, so I add an test m_plugin!= NULL
+    if (m_plugin && !m_plugin->quirks().contains(PluginQuirkDeferFirstSetWindowCall))
         setNPWindowRect(container->frameRect());
 }
 

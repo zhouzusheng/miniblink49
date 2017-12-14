@@ -1982,7 +1982,8 @@ void WebURLLoaderManager::initializeHandleOnIoThread(int jobId, InitializeHandle
     if (getenv("DEBUG_CURL"))
         curl_easy_setopt(job->m_handle, CURLOPT_VERBOSE, 1);
 #endif
-    curl_easy_setopt(job->m_handle, CURLOPT_TIMEOUT, 3000);
+	curl_easy_setopt(job->m_handle, CURLOPT_TIMEOUT, 10000);
+    curl_easy_setopt(job->m_handle, CURLOPT_CONNECTTIMEOUT, 30000);
     curl_easy_setopt(job->m_handle, CURLOPT_SSL_VERIFYPEER, false); // ignoreSSLErrors
     curl_easy_setopt(job->m_handle, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(job->m_handle, CURLOPT_PRIVATE, jobId);

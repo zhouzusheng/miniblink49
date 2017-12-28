@@ -2,6 +2,7 @@
 #if USING_VC6RT == 1
 
 #include <windows.h>
+#include "sys/timeb.h"
 
 void __cdecl operator delete(void* p, unsigned int)
 {
@@ -450,6 +451,83 @@ struct tm* localtime_64(const time_t* pt)
     }
     
     return &today_ret;
+}
+
+typedef union {
+	unsigned __int64 ft_scalar;
+	FILETIME ft_struct;
+} FT;
+
+static __time64_t elapsed_minutes_cache;
+/*
+* Three values of dstflag_cache
+*/
+#define DAYLIGHT_TIME   1
+#define STANDARD_TIME   0
+#define UNKNOWN_TIME    -1
+#define EPOCH_BIAS  116444736000000000i64
+
+/*
+* Cache for the last determined DST status
+*/
+static int dstflag_cache = UNKNOWN_TIME;
+
+ void  __cdecl _ftime64_s(
+	struct _timeb *tp
+)
+{
+	FT nt_time;
+	__time64_t t;
+	TIME_ZONE_INFORMATION tzinfo;
+	DWORD tzstate;
+	long timezone = 8 * 3600L;
+
+	tp->timezone = (short)(timezone / 60);
+
+	GetSystemTimeAsFileTime(&(nt_time.ft_struct));
+
+	/*
+	* Obtain the current DST status. Note the status is cached and only
+	* updated once per minute, if necessary.
+	*/
+	if ((t = (__time64_t)(nt_time.ft_scalar / 600000000i64))
+		!= elapsed_minutes_cache)
+	{
+		if ((tzstate = GetTimeZoneInformation(&tzinfo)) != 0xFFFFFFFF)
+		{
+			/*
+			* Must be very careful in determining whether or not DST is
+			* really in effect.
+			*/
+			if ((tzstate == TIME_ZONE_ID_DAYLIGHT) &&
+				(tzinfo.DaylightDate.wMonth != 0) &&
+				(tzinfo.DaylightBias != 0))
+				dstflag_cache = DAYLIGHT_TIME;
+			else
+				/*
+				* When in doubt, assume standard time
+				*/
+				dstflag_cache = STANDARD_TIME;
+		}
+		else
+			dstflag_cache = UNKNOWN_TIME;
+
+		elapsed_minutes_cache = t;
+	}
+
+	tp->dstflag = (short)dstflag_cache;
+
+	tp->millitm = (unsigned short)((nt_time.ft_scalar / 10000i64) %
+		1000i64);
+
+	tp->time = (__time64_t)((nt_time.ft_scalar - EPOCH_BIAS) / 10000000i64);
+}
+
+void __cdecl _ftime_64(
+	struct _timeb *tp
+)
+{
+	_ftime64_s(tp);
 }
 
 #endif // #if USING_VC6RT == 1

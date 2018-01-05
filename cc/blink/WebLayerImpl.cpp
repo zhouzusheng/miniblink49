@@ -11,7 +11,7 @@
 #include "cc/trees/LayerTreeHost.h"
 #include "cc/tiles/TileGrid.h"
 #include "cc/trees/DrawProperties.h"
-#include "cc/raster/RasterTaskWorkerThreadPool.h"
+#include "cc/raster/RasterTask.h"
 #include "cc/playback/LayerChangeAction.h"
 #include "cc/base/MathUtil.h"
 #include "cc/blink/WebFilterOperationsImpl.h"
@@ -39,6 +39,8 @@ using blink::FloatRect;
 using blink::IntRect;
 using blink::WebDoublePoint;
 using blink::WebFloatPoint3D;
+
+extern bool g_alwaysInflateDirtyRect;
 
 namespace cc_blink {
 namespace {
@@ -1298,6 +1300,10 @@ void WebLayerImpl::requestBoundRepaint(bool directOrPending)
 void WebLayerImpl::invalidateRect(const blink::WebRect& rect)
 {
     blink::IntRect dirtyRect(rect);
+
+    if (g_alwaysInflateDirtyRect)
+        dirtyRect.inflate(1);
+
     if (m_tileGrid)
         m_tileGrid->invalidate(dirtyRect, false);
     setNeedsCommit(false);

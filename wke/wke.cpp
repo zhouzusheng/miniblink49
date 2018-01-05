@@ -152,9 +152,29 @@ void wkeSetCspCheckEnable(wkeWebView webView, bool b)
     net::g_cspCheckEnable = b;
 }
 
+bool g_alwaysIsNotSolideColor = false;
+bool g_drawDirtyDebugLine = false;
+bool g_drawTileLine = false;
+bool g_alwaysInflateDirtyRect = false;
+
 void wkeSetDebugConfig(wkeWebView webView, const char* debugString)
 {
+    String stringDebug(debugString);
 
+    Vector<String> result;
+    stringDebug.split(",", result);
+    for (size_t i = 0; i < result.size(); ++i) {
+        String item = result[i];
+        if ("alwaysIsNotSolideColor" == item) {
+            g_alwaysIsNotSolideColor = true;
+        } else if ("drawDirtyDebugLine" == item) {
+            g_drawDirtyDebugLine = true;
+        } else if ("drawTileLine" == item) {
+            g_drawTileLine = true;
+        } else if ("alwaysInflateDirtyRect" == item) {
+            g_alwaysInflateDirtyRect = true;
+        }
+    }
 }
 
 void wkeUpdate()
@@ -474,14 +494,19 @@ const utf8* wkeGetCookie(wkeWebView webView)
     return webView->cookie();
 }
 
-const wkeCookieList* wkeGetAllCookie()
-{
-    return (const wkeCookieList*)content::WebCookieJarImpl::getAllCookiesBegin();
-}
+// const wkeCookieList* wkeGetAllCookie()
+// {
+//     return (const wkeCookieList*)content::WebCookieJarImpl::getAllCookiesBegin();
+// }
+// 
+// void wkeFreeCookieList(const wkeCookieList* cookieList)
+// {
+//     content::WebCookieJarImpl::getAllCookiesEnd((curl_slist*)cookieList);
+// }
 
-void wkeFreeCookieList(const wkeCookieList* cookieList)
+void wkeVisitAllCookie(void* params, wkeCookieVisitor visitor)
 {
-    content::WebCookieJarImpl::getAllCookiesEnd((curl_slist*)cookieList);
+    content::WebCookieJarImpl::visitAllCookie(params, (content::WebCookieJarImpl::CookieVisitor)visitor);
 }
 
 void wkePerformCookieCommand(wkeCookieCommand command)

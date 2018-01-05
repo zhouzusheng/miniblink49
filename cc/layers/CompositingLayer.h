@@ -61,16 +61,21 @@ public:
 
     virtual void drawToCanvas(LayerTreeHost* host, blink::WebCanvas* canvas, const blink::IntRect& clip);
 
-    void blendToTiles(TileActionInfoVector* willRasteredTiles, const SkBitmap& bitmap, const SkRect& dirtyRect);
+    void blendToTiles(TileActionInfoVector* willRasteredTiles, const SkBitmap* bitmap, const SkRect& dirtyRect);
+    void blendToTilesByTiles(TileActionInfoVector* willRasteredTiles);
     
-    void drawToCanvasChildren(LayerTreeHost* host, SkCanvas* canvas, const blink::IntRect& clip, int deep);
+    void drawToCanvasChildren(LayerTreeHost* host, SkCanvas* canvas, const SkRect& clip, int deep);
 
     size_t tilesSize() const;
 
+    SkColor getBackgroundColor() const;
+
 protected:
     friend class DoClipLayer;
-    void blendToTile(CompositingTile* tile, const SkBitmap& bitmap, const SkRect& dirtyRect);
+    void blendToTile(CompositingTile* tile, const SkBitmap* bitmap, const SkRect& dirtyRect, SkColor* solidColor, bool isSolidColorCoverWholeTile);
 
+    void drawDebugLine(SkCanvas& canvas, CompositingTile* tile);
+        
     int m_id;
     DrawToCanvasProperties* m_prop;
 

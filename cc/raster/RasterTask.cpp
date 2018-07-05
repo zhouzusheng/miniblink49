@@ -19,6 +19,7 @@
 #include "config.h"
 #include "cc/raster/RasterTask.h"
 
+#include "platform/RuntimeEnabledFeatures.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebTraceLocation.h"
 #include "third_party/WebKit/Source/wtf/ThreadingPrimitives.h"
@@ -44,11 +45,7 @@
 
 #include "third_party/WebKit/Source/platform/image-encoders/gdiplus/GDIPlusImageEncoder.h"
 
-extern DWORD g_rasterTime;
-extern DWORD g_nowTime;
-extern int g_mouseTest;
-extern DWORD g_rasterTimeInMouse;
-extern bool g_alwaysIsNotSolideColor;
+extern DWORD g_rasterTaskCount;
 
 namespace blink {
 bool saveDumpFile(const String& url, char* buffer, unsigned int size);
@@ -237,6 +234,7 @@ public:
         DWORD nowTime = (DWORD)(WTF::currentTimeMS() * 100);
         raster();
         releaseRource();
+        g_rasterTaskCount++;
     }
 
     bool performSolidColorAnalysis(const SkRect& tilePos, SkColor* color)
@@ -244,7 +242,7 @@ public:
         skia::AnalysisCanvas canvas(tilePos.width(), tilePos.height());
         canvas.translate(-tilePos.x(), -tilePos.y());
         canvas.clipRect(tilePos, SkRegion::kIntersect_Op);
-        canvas.drawPicture(m_picture);
+        m_picture->playback(&canvas, &canvas);
 
         return canvas.GetColorIfSolid(color);
     }
@@ -278,7 +276,7 @@ public:
             SkColor solidColor;
             bool isSolidColor = performSolidColorAnalysis(dirtyRectInTile, &solidColor);
 
-            if (g_alwaysIsNotSolideColor)
+            if (blink::RuntimeEnabledFeatures::alwaysIsNotSolideColorEnabled())
                 isSolidColor = false;
 
             if (isSolidColor) {

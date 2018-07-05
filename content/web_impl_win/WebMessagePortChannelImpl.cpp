@@ -29,7 +29,8 @@ WebMessagePortChannelImpl::WebMessagePortChannelImpl(
 
 WebMessagePortChannelImpl::~WebMessagePortChannelImpl()
 {
-    ;
+    String output = String::format("WebMessagePortChannelImpl::~WebMessagePortChannelImpl: %p\n", this);
+    OutputDebugStringA(output.utf8().data());
 }
 
 void WebMessagePortChannelImpl::setClient(blink::WebMessagePortChannelClient* client)
@@ -66,8 +67,8 @@ void WebMessagePortChannelImpl::postMessage(const blink::WebString& message, bli
     bool wasEmpty = m_channel->m_outgoingQueue->appendAndCheckEmpty(WTF::adoptPtr(new PlatformMessagePortChannel::EventData(serializedValue, WTF::adoptPtr(channels))));
     if (wasEmpty && m_channel->m_entangledChannel && m_channel->m_entangledChannel->m_remotePort) {
 
-        String output = String::format("WebMessagePortChannelImpl::postMessage: this:%p, MessagePort:%p\n", this, m_channel->m_remotePort);
-        OutputDebugStringA(output.utf8().data());
+//         String output = String::format("WebMessagePortChannelImpl::postMessage: this:%p, MessagePort:%p\n", this, m_channel->m_remotePort);
+//         OutputDebugStringA(output.utf8().data());
 
         m_channel->m_entangledChannel->m_remotePort->messageAvailable();
     }

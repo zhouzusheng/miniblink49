@@ -120,6 +120,8 @@ WebKeyboardEvent PlatformEventHandler::buildKeyboardEvent(WebInputEvent::Type ty
         strcpy(keyEvent.keyIdentifier, "U+0008");
     else if (VK_ESCAPE == keyEvent.windowsKeyCode)
         strcpy(keyEvent.keyIdentifier, "U+001B");
+    else if (VK_RETURN == keyEvent.windowsKeyCode)
+        strcpy(keyEvent.keyIdentifier, "Enter");
 
     memset(keyEvent.text, 0, sizeof(WebUChar) * WebKeyboardEvent::textLengthCap);
     keyEvent.text[0] = (WebUChar)wParam;
@@ -161,8 +163,9 @@ void PlatformEventHandler::fireCaptureChangedEvent(HWND hWnd, UINT message, WPAR
         ::ReleaseCapture();
         m_isDraggableRegionNcHitTest = false;
 
+        MouseEvtInfo info = { true, false, nullptr };
         lParam = MAKELONG(m_lastPosForDrag.x(), m_lastPosForDrag.y());
-        fireMouseEvent(hWnd, WM_LBUTTONUP, wParam, lParam, true, nullptr);
+        fireMouseEvent(hWnd, WM_LBUTTONUP, wParam, lParam, info, nullptr);
     }
 }
 
@@ -218,13 +221,15 @@ bool isNearPos(const blink::IntPoint& a, const blink::IntPoint& b)
     return std::abs(a.x() - b.x()) + std::abs(a.y() - b.y()) < 15;
 }
 
-LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, bool needSetFocus, BOOL* bHandle)
+LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, const MouseEvtInfo& info, BOOL* bHandle)
 {
     bool handle = false;
 
     m_isDraggableRegionNcHitTest = false;
     if (true == m_isAlert)
         return 0;
+
+    bool isValideWindow = ::IsWindow(hWnd) && !info.isWillDestroy;
 
     if (m_bMouseTrack && !m_postMouseLeave && hWnd) {
         TRACKMOUSEEVENT csTME;
@@ -284,8 +289,11 @@ LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wPa
     webMouseEvent.modifiers = 0;
     webMouseEvent.x = pos.x();
     webMouseEvent.y = pos.y();
-    webMouseEvent.movementX = pos.x();
-    webMouseEvent.movementY = pos.y();
+
+    webMouseEvent.movementX = pos.x() - m_lastPosMouseMove.x();
+    webMouseEvent.movementY = pos.y() - m_lastPosMouseMove.y();
+    m_lastPosMouseMove = pos;
+
     webMouseEvent.windowX = pos.x();
     webMouseEvent.windowY = pos.y();
     webMouseEvent.globalX = globalPos.x();
@@ -293,7 +301,7 @@ LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wPa
     webMouseEvent.clickCount = 1;
     buildModifiers(&webMouseEvent);
 
-    if (WM_LBUTTONDOWN == message || WM_MBUTTONDOWN == message || WM_RBUTTONDOWN == message) {
+    if (WM_LBUTTONDOWN == message || WM_MBUTTONDOWN == message || WM_RBUTTONDOWN == message || WM_LBUTTONDBLCLK == message) {
         handle = true;
 
         double time = WTF::currentTime();
@@ -305,55 +313,73 @@ LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wPa
         m_lastTimeMouseDown = time;
         m_lastPosMouseDown = pos;
 
-        if (hWnd && needSetFocus) {
-            if (::GetFocus() != hWnd)
+        bool isDraggable = false;
+        if (WM_LBUTTONDOWN == message)
+            isDraggable = doDraggableRegionNcHitTest(hWnd, pos, info.draggableRegion);
+        if (hWnd && info.isNeedSetFocus) {
+            if (isValideWindow && ::GetFocus() != hWnd)
                 ::SetFocus(hWnd);
-            ::SetCapture(hWnd);
+            if (isValideWindow && !isDraggable)
+                ::SetCapture(hWnd);
         }
         switch (message) {
         case WM_LBUTTONDOWN:
             webMouseEvent.button = WebMouseEvent::ButtonLeft;
+            webMouseEvent.modifiers |= WebMouseEvent::LeftButtonDown;
             break;
         case WM_MBUTTONDOWN:
             webMouseEvent.button = WebMouseEvent::ButtonMiddle;
+            webMouseEvent.modifiers |= WebMouseEvent::MiddleButtonDown;
             break;
         case WM_RBUTTONDOWN:
             webMouseEvent.button = WebMouseEvent::ButtonRight;
+            webMouseEvent.modifiers |= WebMouseEvent::RightButtonDown;
             break;
         }
         m_isDraggableRegionNcHitTest = false;
         webMouseEvent.type = WebInputEvent::MouseDown;
-        m_webWidget->handleInputEvent(webMouseEvent);
+        bool b = m_webWidget->handleInputEvent(webMouseEvent);
         //makeDraggableRegionNcHitTest(hWnd, lParam, &m_isDraggableRegionNcHitTest, m_lastPosForDrag);
+        if (isValideWindow && isDraggable)
+            ::PostMessage(hWnd, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, 0);
     } else if (WM_LBUTTONUP == message || WM_MBUTTONUP == message || WM_RBUTTONUP == message) {
         handle = true;
         switch (message) {
         case WM_LBUTTONUP:
             webMouseEvent.button = WebMouseEvent::ButtonLeft;
+            webMouseEvent.modifiers |= WebMouseEvent::LeftButtonDown;
             break;
         case WM_MBUTTONUP:
             webMouseEvent.button = WebMouseEvent::ButtonMiddle;
+            webMouseEvent.modifiers |= WebMouseEvent::MiddleButtonDown;
             break;
         case WM_RBUTTONUP:
             webMouseEvent.button = WebMouseEvent::ButtonRight;
+            webMouseEvent.modifiers |= WebMouseEvent::RightButtonDown;
             break;
         }
-        ::ReleaseCapture();
+        if (isValideWindow)
+            ::ReleaseCapture();
         if (m_webViewImpl)
             m_webViewImpl->dragSourceSystemDragEnded();
         webMouseEvent.type = WebInputEvent::MouseUp;
-        m_webWidget->handleInputEvent(webMouseEvent);
+        m_webWidget->handleInputEvent(webMouseEvent);        
     } else if (WM_MOUSEMOVE == message || WM_MOUSELEAVE == message) {
         handle = true;
-        if (wParam & MK_LBUTTON)
+        if (wParam & MK_LBUTTON) {
             webMouseEvent.button = WebMouseEvent::ButtonLeft;
-        else if (wParam & MK_MBUTTON)
+            webMouseEvent.modifiers |= WebMouseEvent::LeftButtonDown;
+        } else if (wParam & MK_MBUTTON) {
             webMouseEvent.button = WebMouseEvent::ButtonMiddle;
-        else if (wParam & MK_RBUTTON)
+            webMouseEvent.modifiers |= WebMouseEvent::MiddleButtonDown;
+        } else if (wParam & MK_RBUTTON) {
             webMouseEvent.button = WebMouseEvent::ButtonRight;
-        else
+            webMouseEvent.modifiers |= WebMouseEvent::RightButtonDown;
+        } else {
             webMouseEvent.button = WebMouseEvent::ButtonNone;
+        }
 
+        bool b = false;
         switch (message) {
         case WM_MOUSEMOVE:
             if (!m_mouseInWindow) {
@@ -362,13 +388,13 @@ LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wPa
             }
             else
                 webMouseEvent.type = WebInputEvent::MouseMove;
-            m_webWidget->handleInputEvent(webMouseEvent);
+            b = m_webWidget->handleInputEvent(webMouseEvent);
             break;
         case WM_MOUSELEAVE:
             webMouseEvent.type = WebInputEvent::MouseLeave;
             if (m_webViewImpl)
                 m_webViewImpl->dragSourceSystemDragEnded();
-            m_webWidget->handleInputEvent(webMouseEvent);
+            b = m_webWidget->handleInputEvent(webMouseEvent);
             m_mouseInWindow = false;
             break;
         }
@@ -377,6 +403,14 @@ LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wPa
     if (bHandle)
         *bHandle = handle;
     return 0;
+}
+
+bool PlatformEventHandler::doDraggableRegionNcHitTest(HWND hWnd, const blink::IntPoint& pos, HRGN draggableRegion)
+{
+    if (blink::RuntimeEnabledFeatures::updataInOtherThreadEnabled() || !draggableRegion)
+        return false;
+
+    return ::PtInRegion(draggableRegion, pos.x(), pos.y());
 }
 
 static int verticalScrollLines()

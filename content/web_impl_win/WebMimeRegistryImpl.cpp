@@ -6,6 +6,7 @@
 #include <wtf/HashMap.h>
 
 namespace content {
+
 WebMimeRegistryImpl::WebMimeRegistryImpl() 
 {
     m_supportedMIMETypes = nullptr;
@@ -62,7 +63,8 @@ blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsMIMEType(const
 {
     WTF::String extension = checkAndEnsureBit8String(ext);
     if (extension.isEmpty())
-        return blink::WebMimeRegistry::IsNotSupported;
+        return blink::WebMimeRegistry::IsSupported;
+    extension = extension.lower();
 
     if (!m_supportedMIMETypes) {
         m_supportedMIMETypes = new WTF::HashSet<WTF::String>();
@@ -71,6 +73,7 @@ blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsMIMEType(const
             "text/plain",
             "text/html",
             "text/xml",
+            "multipart/related",
             "application/x-javascript",
             "application/xhtml+xml",
             "image/svg+xml",
@@ -94,6 +97,7 @@ blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsImageMIMEType(
     WTF::String extension = checkAndEnsureBit8String(ext);
     if (extension.isEmpty())
         return blink::WebMimeRegistry::IsNotSupported;
+    extension = extension.lower();
 
     if (!m_supportedImageResourceMIMETypes) {
         m_supportedImageResourceMIMETypes = new WTF::HashSet<WTF::String>();
@@ -119,6 +123,7 @@ blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsJavaScriptMIME
     WTF::String extension = checkAndEnsureBit8String(ext);
     if (extension.isEmpty())
         return blink::WebMimeRegistry::IsNotSupported;
+    extension = extension.lower();
 
     if (!m_supportedJavaScriptMIMETypes) {
         m_supportedJavaScriptMIMETypes = new WTF::HashSet<WTF::String>();
@@ -165,6 +170,7 @@ blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsNonImageMIMETy
     WTF::String extension = checkAndEnsureBit8String(ext);
     if (extension.isEmpty())
         return blink::WebMimeRegistry::IsNotSupported;
+    extension = extension.lower();
     
     if (!m_supportedNonImageMIMETypes) {
         m_supportedNonImageMIMETypes = new HashSet<String>();
@@ -186,6 +192,7 @@ blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsNonImageMIMETy
 //#endif
             "application/x-ftp-directory",
             "multipart/x-mixed-replace",
+            "multipart/related",
             //"application/x-shockwave-flash",
             // Note: ADDING a new type here will probably render it as HTML. This can
             // result in cross-site scripting.
@@ -199,6 +206,45 @@ blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsNonImageMIMETy
     return m_supportedNonImageMIMETypes->contains(extension) ? blink::WebMimeRegistry::IsSupported : blink::WebMimeRegistry::IsNotSupported;
 }
 
+void WebMimeRegistryImpl::ensureMimeTypeMap()
+{
+    if (m_mimetypeMap) 
+        return;
+
+    m_mimetypeMap = new WTF::HashMap<WTF::String, WTF::String>();
+    //fill with initial values
+    m_mimetypeMap->add("txt", "text/plain");
+    m_mimetypeMap->add("pdf", "application/pdf");
+    m_mimetypeMap->add("ps", "application/postscript");
+    m_mimetypeMap->add("html", "text/html");
+    m_mimetypeMap->add("htm", "text/html");
+    m_mimetypeMap->add("xml", "text/xml");
+    m_mimetypeMap->add("xsl", "text/xsl");
+    m_mimetypeMap->add("js", "application/x-javascript");
+    m_mimetypeMap->add("xhtml", "application/xhtml+xml");
+    m_mimetypeMap->add("rss", "application/rss+xml");
+    m_mimetypeMap->add("webarchive", "application/x-webarchive");
+    m_mimetypeMap->add("svg", "image/svg+xml");
+    m_mimetypeMap->add("svgz", "image/svg+xml");
+    m_mimetypeMap->add("jpg", "image/jpeg");
+    m_mimetypeMap->add("jpeg", "image/jpeg");
+    m_mimetypeMap->add("png", "image/png");
+    m_mimetypeMap->add("gif", "image/gif");
+    m_mimetypeMap->add("tif", "image/tiff");
+    m_mimetypeMap->add("tiff", "image/tiff");
+    m_mimetypeMap->add("ico", "image/ico");
+    m_mimetypeMap->add("cur", "image/ico");
+    m_mimetypeMap->add("bmp", "image/bmp");
+    m_mimetypeMap->add("wml", "text/vnd.wap.wml");
+    m_mimetypeMap->add("wmlc", "application/vnd.wap.wmlc");
+    m_mimetypeMap->add("swf", "application/x-shockwave-flash");
+    m_mimetypeMap->add("mp4", "video/mp4");
+    m_mimetypeMap->add("ogg", "video/ogg");
+    m_mimetypeMap->add("webm", "video/webm");
+    m_mimetypeMap->add("mht", "multipart/related");
+    m_mimetypeMap->add("mhtml", "multipart/related");
+}
+
 blink::WebString WebMimeRegistryImpl::mimeTypeForExtension(const blink::WebString& ext)
 {
     ASSERT(isMainThread());
@@ -206,48 +252,35 @@ blink::WebString WebMimeRegistryImpl::mimeTypeForExtension(const blink::WebStrin
     if (ext.isNull() || ext.isEmpty())
         return blink::WebString();
 
+    ensureMimeTypeMap();
     WTF::String extension = WTF::ensureStringToUTF8String(ext);
-    if (!m_mimetypeMap) {
-        m_mimetypeMap = new WTF::HashMap<WTF::String, WTF::String>();
-        //fill with initial values
-        m_mimetypeMap->add("txt", "text/plain");
-        m_mimetypeMap->add("pdf", "application/pdf");
-        m_mimetypeMap->add("ps", "application/postscript");
-        m_mimetypeMap->add("html", "text/html");
-        m_mimetypeMap->add("htm", "text/html");
-        m_mimetypeMap->add("xml", "text/xml");
-        m_mimetypeMap->add("xsl", "text/xsl");
-        m_mimetypeMap->add("js", "application/x-javascript");
-        m_mimetypeMap->add("xhtml", "application/xhtml+xml");
-        m_mimetypeMap->add("rss", "application/rss+xml");
-        m_mimetypeMap->add("webarchive", "application/x-webarchive");
-        m_mimetypeMap->add("svg", "image/svg+xml");
-        m_mimetypeMap->add("svgz", "image/svg+xml");
-        m_mimetypeMap->add("jpg", "image/jpeg");
-        m_mimetypeMap->add("jpeg", "image/jpeg");
-        m_mimetypeMap->add("png", "image/png");
-        m_mimetypeMap->add("gif", "image/gif");
-        m_mimetypeMap->add("tif", "image/tiff");
-        m_mimetypeMap->add("tiff", "image/tiff");
-        m_mimetypeMap->add("ico", "image/ico");
-        m_mimetypeMap->add("cur", "image/ico");
-        m_mimetypeMap->add("bmp", "image/bmp");
-        m_mimetypeMap->add("wml", "text/vnd.wap.wml");
-        m_mimetypeMap->add("wmlc", "application/vnd.wap.wmlc");
-        m_mimetypeMap->add("swf", "application/x-shockwave-flash");
-        //
-    }
+    extension = extension.lower();
     WTF::String result = m_mimetypeMap->get(extension);
     return result;
 }
 
-blink::WebString WebMimeRegistryImpl::wellKnownMimeTypeForExtension(const blink::WebString&)
+blink::WebString WebMimeRegistryImpl::wellKnownMimeTypeForExtension(const blink::WebString& ext)
+{
+    return mimeTypeForExtension(ext);
+}
+
+blink::WebString WebMimeRegistryImpl::mimeTypeFromFile(const blink::WebString& ext)
 {
     return blink::WebString();
 }
 
-blink::WebString WebMimeRegistryImpl::mimeTypeFromFile(const blink::WebString&)
+blink::WebString WebMimeRegistryImpl::extensionFormimeType(const blink::WebString& ext)
 {
+    ASSERT(isMainThread());
+
+    if (ext.isNull() || ext.isEmpty())
+        return blink::WebString();
+
+    ensureMimeTypeMap();
+    for (WTF::HashMap<WTF::String, WTF::String>::iterator it = m_mimetypeMap->begin(); it != m_mimetypeMap->end(); ++it) {
+        if (WTF::equalIgnoringCase(it->value, String(ext)))
+            return it->key;
+    }
     return blink::WebString();
 }
 

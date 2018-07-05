@@ -55,6 +55,10 @@
 typedef HWND PlatformWidget;
 typedef PlatformWidget PlatformPluginWidget;
 
+namespace wke {
+class CWebView;
+}
+
 namespace blink {
 class WebPluginContainer;
 class GraphicsContext;
@@ -266,24 +270,39 @@ public:
 
     void keepAlive();
 
-    void setPlatformPluginWidget(PlatformPluginWidget widget) { setPlatformWidget(widget); }
-    PlatformPluginWidget platformPluginWidget() const { return platformWidget(); }
-
-    PlatformWidget platformWidget() const { return m_widget; }
-    void setPlatformWidget(PlatformWidget widget)
+    void setPlatformPluginWidget(PlatformPluginWidget widget)
     {
         if (widget != m_widget) {
             m_widget = widget;
         }
     }
 
-    void setParentPlatformWidget(PlatformWidget widget)
+    PlatformPluginWidget platformPluginWidget() const 
+    { 
+        return m_widget;
+    }
+
+//     PlatformWidget platformWidget() const { return m_widget; }
+//     void setPlatformWidget(PlatformWidget widget)
+//     {
+//         if (widget != m_widget) {
+//             m_widget = widget;
+//         }
+//     }
+
+    void setParentPlatformPluginWidget(PlatformWidget widget)
     {
         if (widget != m_parentWidget)
             m_parentWidget = widget;
     }
 
-    void setWebViewClient(blink::WebViewClient* client) { m_webviewClient = client; }
+    PlatformPluginWidget parentPlatformPluginWidget() const
+    {
+        return m_parentWidget;
+    }
+    
+    void setWkeWebView(wke::CWebView* wkeWebview) { m_wkeWebview = wkeWebview; }
+    wke::CWebView* getWkeWebView() { return m_wkeWebview; }
 
     void setHwndRenderOffset(const blink::IntPoint& offset)
     {
@@ -330,7 +349,7 @@ private:
     void scheduleRequest(PassOwnPtr<PluginRequest>);
     void requestTimerFired(blink::Timer<WebPluginImpl>*);
     void invalidateTimerFired(blink::Timer<WebPluginImpl>*);
-    void platformStartAsyn();
+    void platformStartImpl(bool isSync);
     blink::Timer<WebPluginImpl> m_requestTimer;
     blink::Timer<WebPluginImpl> m_invalidateTimer;
 
@@ -418,7 +437,7 @@ private:
     static WebPluginImpl* s_currentPluginView;
 
     SkCanvas* m_memoryCanvas;
-    blink::WebViewClient* m_webviewClient;
+    wke::CWebView* m_wkeWebview;
 };
 
 } // namespace content

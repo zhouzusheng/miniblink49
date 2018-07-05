@@ -9,6 +9,7 @@
 #include "common/IdLiveDetect.h"
 #include "common/NodeBinding.h"
 #include "common/api/EventEmitterCaller.h"
+#include "common/StringUtil.h"
 #include "gin/dictionary.h"
 #include "gin/object_template_builder.h"
 #include "base/values.h"
@@ -76,13 +77,13 @@ void WebContents::init(v8::Isolate* isolate, v8::Local<v8::Object> target, node:
     builder.SetMethod("isOffscreen", &WebContents::isOffscreenApi);
     builder.SetMethod("startPainting", &WebContents::startPaintingApi);
     builder.SetMethod("stopPainting", &WebContents::stopPaintingApi);
-    builder.SetMethod("isPainting", &WebContents::isPaintingApi);
+    builder.SetMethod("isPainting", &WebContents::isPaintingApi);    
     builder.SetMethod("setFrameRate", &WebContents::setFrameRateApi);
     builder.SetMethod("getFrameRate", &WebContents::getFrameRateApi);
     builder.SetMethod("invalidate", &WebContents::invalidateApi);
     builder.SetMethod("getType", &WebContents::getTypeApi);
     builder.SetMethod("getWebPreferences", &WebContents::getWebPreferencesApi);
-    builder.SetMethod("getOwnerBrowserWindow", &WebContents::getOwnerBrowserWindowApi);
+    builder.SetMethod("getOwnerBrowserWindow", &WebContents::getOwnerBrowserWindowApi);    
     builder.SetMethod("hasServiceWorker", &WebContents::hasServiceWorkerApi);
     builder.SetMethod("unregisterServiceWorker", &WebContents::unregisterServiceWorkerApi);
     builder.SetMethod("inspectServiceWorker", &WebContents::inspectServiceWorkerApi);
@@ -96,11 +97,9 @@ void WebContents::init(v8::Isolate* isolate, v8::Local<v8::Object> target, node:
     builder.SetMethod("setEmbedder", &WebContents::setEmbedderApi);
     builder.SetMethod("isDestroyed", &WebContents::isDestroyedApi);
     builder.SetProperty("id", &WebContents::getIdApi);
-//     NODE_SET_PROTOTYPE_METHOD(tpl, "id", nullFunction);
-//     NODE_SET_PROTOTYPE_METHOD(tpl, "session", nullFunction);
-//     NODE_SET_PROTOTYPE_METHOD(tpl, "hostWebContents", nullFunction);
-//     NODE_SET_PROTOTYPE_METHOD(tpl, "devToolsWebContents", nullFunction);
-//     NODE_SET_PROTOTYPE_METHOD(tpl, "debugger", nullFunction);
+
+    gin::Dictionary webContentsClass(isolate, prototype->GetFunction());
+    webContentsClass.SetMethod("getFocusedWebContents", &WebContents::getFocusedWebContentsApi);
 
     constructor.Reset(isolate, prototype->GetFunction());
     target->Set(v8::String::NewFromUtf8(isolate, "WebContents"), prototype->GetFunction());
@@ -112,15 +111,19 @@ WebContents* WebContents::create(v8::Isolate* isolate, gin::Dictionary options, 
     v8::Local<v8::Function> constructorFunction = v8::Local<v8::Function>::New(isolate, constructor);
 
     v8::MaybeLocal<v8::Object> obj = constructorFunction->NewInstance(argc, argv);
-    WebContents* self = (WebContents*)WrappableBase::GetNativePtr(obj.ToLocalChecked(), &kWrapperInfo);
+    v8::Local<v8::Object> objV8 = obj.ToLocalChecked();
+
+    WebContents* self = (WebContents*)WrappableBase::GetNativePtr(objV8, &kWrapperInfo);
+    self->m_liveSelf.Reset(isolate, objV8);
     self->m_owner = owner;
     return self;
 }
 
 WebContents::WebContents(v8::Isolate* isolate, v8::Local<v8::Object> wrapper) {
-    
+    m_isNodeIntegration = true;
+    m_isLoading = false;
     m_nodeBinding = nullptr;
-    m_id = IdLiveDetect::get()->constructed();
+    m_id = IdLiveDetect::get()->constructed(this);
     m_view = nullptr;
     int id = m_id;
     gin::Wrappable<WebContents>::InitWith(isolate, wrapper);
@@ -132,17 +135,33 @@ WebContents::WebContents(v8::Isolate* isolate, v8::Local<v8::Object> wrapper) {
 
         self->m_view = wkeCreateWebView();
         wkeSetUserKeyValue(self->m_view, "WebContents", self);
-    });    
+    });
 }
 
-WebContents::~WebContents() {
-    //wkeDestroyWebView(m_view);
-    if (m_nodeBinding)
-        delete m_nodeBinding;
+WebContents::~WebContents() { // 在ui线程的js环境中可能因为gc机制被触发析构
+    char* output = (char*)malloc(0x100);
+    sprintf(output, "~WebContents %p\n", this);
+    OutputDebugStringA(output);
+    free(output);
 
     for (auto it : m_observers) {
         (it)->onWebContentsDeleted(this);
     }
+
+    m_owner->close();
+    
+    wkeSetUserKeyValue(m_view, "WebContents", nullptr);
+
+//     NodeBindings* nodeBinding = m_nodeBinding;
+//     wkeWebView view = m_view;
+//     ThreadCall::callBlinkThreadAsync([view, nodeBinding] {
+//         wkeDestroyWebView(view);
+// 
+//         char* output = (char*)malloc(0x100);
+//         sprintf(output, "~wkeDestroyWebView %p\n", view);
+//         OutputDebugStringA(output);
+//         free(output);
+//     });
 
     IdLiveDetect::get()->deconstructed(m_id);
 }
@@ -192,7 +211,7 @@ void WebContents::staticDidCreateScriptContextCallback(wkeWebView webView, wkeWe
 }
 
 void WebContents::onDidCreateScriptContext(wkeWebView webView, wkeWebFrameHandle frame, v8::Local<v8::Context>* context, int extensionGroup, int worldId) {
-    if (m_nodeBinding || !wkeWebFrameIsMainFrame(frame))
+    if (m_nodeBinding || !wkeIsMainFrame(webView, frame) || !m_isNodeIntegration)
         return;
 
     BlinkMicrotaskSuppressionHandle handle = nodeBlinkMicrotaskSuppressionEnter((*context)->GetIsolate());
@@ -208,9 +227,8 @@ void WebContents::staticOnWillReleaseScriptContextCallback(wkeWebView webView, v
 }
 
 void WebContents::onWillReleaseScriptContextCallback(wkeWebView webView, wkeWebFrameHandle frame, v8::Local<v8::Context>* context, int worldId) {
-    if (!m_nodeBinding)
-        return;
     node::Environment* env = node::Environment::GetCurrent(*context);
+
     if (env)
         mate::emitEvent(env->isolate(), env->process_object(), "exit");
 
@@ -223,7 +241,7 @@ void WebContents::rendererPostMessageToMain(const std::string& channel, const ba
     WebContents* self = this;
     std::string* channelWrap = new std::string(channel);
     base::ListValue* listParamsWrap = listParams.DeepCopy();
-
+    
     ThreadCall::callUiThreadAsync([self, id, channelWrap, listParamsWrap] {
         if (IdLiveDetect::get()->isLive(id)) {
             self->mate::EventEmitter<WebContents>::emit("ipc-message", *listParamsWrap);
@@ -237,12 +255,6 @@ void WebContents::rendererSendMessageToMain(const std::string& channel, const ba
     WebContents* self = this;
     const std::string* channelWrap = &channel;
     const base::ListValue* listParamsWrap = &listParams;
-
-    std::string outValue;
-    listParams.GetString(0, &outValue);
-
-    std::string outValue2;
-    listParams.GetString(2, &outValue2);
 
     ThreadCall::callUiThreadSync([self, channelWrap, listParamsWrap, jsonRet] {
         self->mate::EventEmitter<WebContents>::emitWithSender("ipc-message-sync", [jsonRet](const std::string& json) {
@@ -271,15 +283,15 @@ static std::vector<v8::Local<v8::Value>> listValueToVector(v8::Isolate* isolate,
     return result;
 }
 
-static void emitIPCEvent(wkeWebFrameHandle frame, const std::string& channel, const base::ListValue& args) {
-    if (!frame || wkeIsWebRemoteFrame(frame))
+static void emitIPCEvent(WebContents* webContents, wkeWebView view, wkeWebFrameHandle frame, const std::string& channel, const base::ListValue& args) {
+    if (!frame || wkeIsWebRemoteFrame(view, frame))
         return;
 
     v8::Isolate* isolate = (v8::Isolate*)wkeGetBlinkMainThreadIsolate();
     v8::HandleScope handleScope(isolate);
 
     v8::Local<v8::Context> context;
-    wkeWebFrameGetMainWorldScriptContext(frame, &context);
+    wkeWebFrameGetMainWorldScriptContext(view, frame, &context);
     v8::Context::Scope contextScope(context);
 
     // Only emit IPC event for context with node integration.
@@ -289,14 +301,21 @@ static void emitIPCEvent(wkeWebFrameHandle frame, const std::string& channel, co
 
     v8::Local<v8::Object> ipc;
     if (getIPCObject(isolate, context, &ipc)) {
-        std::vector<v8::Local<v8::Value>> argsVector = listValueToVector(isolate, args);
-        // Insert the Event object, event.sender is ipc.
-        gin::Dictionary evt = gin::Dictionary::CreateEmpty(isolate);
-        evt.Set("sender", ipc);
-        argsVector.insert(argsVector.begin(), evt.GetHandle());
 
+        std::vector<v8::Local<v8::Value>> argsVector = listValueToVector(isolate, args);
+        gin::Dictionary evt = gin::Dictionary::CreateEmpty(isolate);
+#if 1 // 2.x版本electron的sender改成webContents(此处存疑，应该不是的)
+        evt.Set("sender", ipc); // Insert the Event object, event.sender is ipc.
+#else
+        evt.Set("sender", webContents->GetWrapper(isolate));
+#endif
+        argsVector.insert(argsVector.begin(), evt.GetHandle());
         mate::emitEvent(isolate, ipc, channel, argsVector);
     }
+}
+
+void WebContents::rendererSendMessageToRenderer(wkeWebView view, wkeWebFrameHandle frame, const std::string& channel, const base::ListValue& args) {
+    emitIPCEvent(nullptr, view, frame, channel, args);
 }
 
 void WebContents::anyPostMessageToRenderer(const std::string& channel, const base::ListValue& listParams) {
@@ -305,14 +324,23 @@ void WebContents::anyPostMessageToRenderer(const std::string& channel, const bas
     std::string* channelWrap = new std::string(channel);
     base::ListValue* listParamsWrap = listParams.DeepCopy();
 
-    ThreadCall::callBlinkThreadAsync([self, id, channelWrap, listParamsWrap] {
+    //std::string* strCallstack = catchCallstack(isolate());
+
+    ThreadCall::callBlinkThreadAsync([self, id, channelWrap, listParamsWrap/*, strCallstack*/] {
         if (IdLiveDetect::get()->isLive(id)) {
-            emitIPCEvent(wkeWebFrameGetMainFrame(self->m_view), *channelWrap, *listParamsWrap);
+            emitIPCEvent(self, self->m_view, wkeWebFrameGetMainFrame(self->m_view), *channelWrap, *listParamsWrap);
         }
 
         delete channelWrap;
         delete listParamsWrap;
+        //delete strCallstack;
     });
+}
+
+void WebContents::getFocusedWebContentsApi(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    v8::Local<v8::Value> result = WindowInterface::getFocusedContents(info.GetIsolate());
+    info.GetReturnValue().Set(result);
+    //return result;
 }
 
 int WebContents::getIdApi() const {
@@ -327,16 +355,52 @@ bool WebContents::equalApi() const {
     return false;
 }
 
+static std::string* trimUrl(const std::string& url) {
+    std::string* str = new std::string(url);
+    if (str->size() > 9 && str->substr(0, 7) == "file://") {
+        if (str->at(7) != '/')
+            str->insert(7, 1, '/');
+
+        for (size_t i = 0; i < str->size(); ++i) { // 如果是中文路径，则把问号前面的内容解码
+            char c = str->at(i);
+            if ('?' != c)
+                continue;
+
+            std::string urldecodeHead = StringUtil::urlDecode(str->c_str(), i + 1);
+            urldecodeHead += str->substr(i, str->size() - i);
+            *str = urldecodeHead;
+            break;
+        }
+    }
+
+    char invalideHead[] = "http:\\";
+    int invalideHeadLength = sizeof(invalideHead) - 1;
+    if (((int)str->size() > invalideHeadLength) && str->substr(0, invalideHeadLength) == invalideHead) {
+        for (size_t i = 0; i < str->size(); ++i) { // 反斜杠替换成斜杠
+            char c = str->at(i);
+            if ('\\' != c)
+                continue;
+            str->at(i) = '/';
+        }
+        char c = str->at(invalideHeadLength);
+        if (c != '/')
+            str->insert(str->begin() + invalideHeadLength, 1, '/');
+    }
+
+    return str;
+}
+
 void WebContents::_loadURLApi(const std::string& url) {
     WebContents* self = this;
-    std::string* str = new std::string(url);
-    if (str->size() > 9 && str->substr(0, 7) == "file://" && str->at(7) != '/')
-        str->insert(7, 1, '/');
+    std::string* str = trimUrl(url);
+    m_isLoading = true;
 
     int id = m_id;
     ThreadCall::callBlinkThreadAsync([self, str, id] {
-        if (IdLiveDetect::get()->isLive(id))
-            wkeLoadURL(self->m_view, str->c_str());
+        if (!IdLiveDetect::get()->isLive(id))
+            return;
+        wkeLoadURL(self->m_view, str->c_str());
+        self->m_isLoading = false;
         delete str;
     });
 }
@@ -362,12 +426,12 @@ std::string WebContents::getTitleApi() {
 }
 
 bool WebContents::isLoadingApi() {
-    bool isLoading;
+    bool isLoading = false;
     WebContents* self = this;
     int id = m_id;
-    ThreadCall::callBlinkThreadSync([self, &isLoading] {
-        isLoading = wkeIsLoading(self->m_view);
-    });
+//     ThreadCall::callBlinkThreadSync([self, &isLoading] {
+//         isLoading = wkeIsLoading(self->m_view);
+//     });
     return isLoading;
 }
 
@@ -620,8 +684,8 @@ bool WebContents::_sendApi(bool isAllFrames, const std::string& channel, const b
     WindowList::iterator winIt = WindowList::getInstance()->begin();
     for (; winIt != WindowList::getInstance()->end(); ++winIt) {
         WindowInterface* windowInterface = *winIt;
-        WebContents* webCcontents = windowInterface->getWebContents();
-        webCcontents->anyPostMessageToRenderer(channel, args);
+        WebContents* webContents = windowInterface->getWebContents();
+        webContents->anyPostMessageToRenderer(channel, args);
     }
     return true;
 }

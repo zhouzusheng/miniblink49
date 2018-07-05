@@ -17,6 +17,7 @@
 #include "cc/layers/CompositingLayer.h"
 #include "cc/playback/LayerChangeAction.h"
 
+#include "platform/RuntimeEnabledFeatures.h"
 #include "third_party/WebKit/public/web/WebViewClient.h"
 #include "third_party/WebKit/public/platform/WebFloatSize.h"
 #include "third_party/WebKit/public/platform/WebGestureCurveTarget.h"
@@ -29,8 +30,6 @@
 extern DWORD g_nowTime;
 
 using namespace blink;
-
-extern bool wkeIsUpdataInOtherThread;
 
 namespace cc {
 
@@ -62,6 +61,7 @@ LayerTreeHost::LayerTreeHost(LayerTreeHostClent* hostClient, LayerTreeHostUiThre
     
     m_memoryCanvas = nullptr;
     m_paintToMemoryCanvasInUiThreadTaskCount = 0;
+    m_drawMinInterval = 0.003;
 
     m_isDrawDirty = true;
     m_lastCompositeTime = 0.0;
@@ -183,11 +183,13 @@ void LayerTreeHost::unregisterLayer(cc_blink::WebLayerImpl* layer)
 
 void LayerTreeHost::registerCCLayer(CompositingLayer* layer)
 {
+    WTF::Locker<WTF::Mutex> locker(m_compositeMutex);
     m_liveCCLayers.add(layer->id(), layer);
 }
 
 void LayerTreeHost::unregisterCCLayer(CompositingLayer* layer)
 {
+    WTF::Locker<WTF::Mutex> locker(m_compositeMutex);
     m_liveCCLayers.remove(layer->id());
 }
 
@@ -208,6 +210,14 @@ CompositingLayer* LayerTreeHost::getCCLayerById(int id)
         return it->value;
 
     return nullptr;
+}
+
+void LayerTreeHost::gc()
+{
+    for (auto it = m_liveLayers.begin(); it != m_liveLayers.end(); ++it) {
+        cc_blink::WebLayerImpl* layer = it->value;
+        layer->gc();
+    }
 }
 
 void LayerTreeHost::increaseNodesCount()
@@ -311,8 +321,6 @@ static bool compareAction(LayerChangeAction*& left, LayerChangeAction*& right)
     return left->actionId() < right->actionId();
 }
 
-const double kMinDetTime = 0.003;
-
 bool LayerTreeHost::canRecordActions() const
 {
     if (!m_actionsFrameGroup->containComefromMainframeLocked())
@@ -326,7 +334,7 @@ bool LayerTreeHost::canRecordActions() const
     
     double lastRecordTime = WTF::monotonicallyIncreasingTime();
     double detTime = lastRecordTime - m_lastRecordTime;
-    if (detTime < kMinDetTime)
+    if (detTime < m_drawMinInterval)
         return false;
     m_lastRecordTime = lastRecordTime;
 
@@ -485,6 +493,8 @@ static void flattenTo2d(SkMatrix44& matrix)
 
 void LayerTreeHost::recordDraw()
 {
+    if (blink::RuntimeEnabledFeatures::headlessEnabled())
+        return;
     if (!m_rootLayer)
         return;
 
@@ -795,6 +805,8 @@ blink::WebColor LayerTreeHost::getBackgroundColor() const
 
 void LayerTreeHost::setHasTransparentBackground(bool b)
 {
+    if (m_hasTransparentBackground == b)
+        return;
     m_hasTransparentBackground = b;
     recursiveSetColor(&m_liveLayers, m_hasTransparentBackground, m_backgroundColor);
 }
@@ -908,6 +920,11 @@ void LayerTreeHost::clearCanvas(SkCanvas* canvas, const SkRect& rect, bool useLa
     canvas->drawRect(skrc, clearPaint);
 }
 
+void LayerTreeHost::setDrawMinInterval(double drawMinInterval)
+{
+    m_drawMinInterval = drawMinInterval;
+}
+
 void LayerTreeHost::postPaintMessage(const SkRect& paintRect)
 {
     SkRect dirtyRect = paintRect;
@@ -966,7 +983,7 @@ void LayerTreeHost::drawFrameInCompositeThread()
 
     double lastCompositeTime = WTF::monotonicallyIncreasingTime();
     double detTime = lastCompositeTime - m_lastCompositeTime;
-    if (detTime < kMinDetTime && !m_isDestroying) { // 如果刷新频率太快，缓缓再画
+    if (detTime < m_drawMinInterval && !m_isDestroying) { // 如果刷新频率太快，缓缓再画
         requestDrawFrameToRunIntoCompositeThread();
         atomicDecrement(&m_drawFrameFinishCount);
         return;
@@ -1042,7 +1059,7 @@ void LayerTreeHost::WrapSelfForUiThread::paintInUiThread()
 
     double lastPaintTime = WTF::monotonicallyIncreasingTime();
     double detTime = lastPaintTime - m_host->m_lastPaintTime;
-    if (detTime < kMinDetTime) {
+    if (detTime < m_host->m_drawMinInterval) {
         m_host->requestPaintToMemoryCanvasToUiThread(IntRect());
         endPaint();
         return;
@@ -1119,7 +1136,7 @@ void LayerTreeHost::paintToMemoryCanvas(const SkRect& r)
     drawToCanvas(m_memoryCanvas, paintRect); // 绘制脏矩形
 
 #if ENABLE_WKE == 1
-    if (wkeIsUpdataInOtherThread) {
+    if (blink::RuntimeEnabledFeatures::updataInOtherThreadEnabled()) {
         blink::IntRect intPaintRect(paintRect.x(), paintRect.y(), paintRect.width(), paintRect.height());
         m_uiThreadClient->paintToMemoryCanvasInUiThread(m_memoryCanvas, intPaintRect);
         return;
@@ -1158,8 +1175,84 @@ void LayerTreeHost::enablePaint()
     m_hostClient->enablePaint();
 }
 
+LayerTreeHost::BitInfo* LayerTreeHost::getBitBegin()
+{
+    WTF::Locker<WTF::Mutex> locker(m_compositeMutex);
+    if (!m_memoryCanvas)
+        return nullptr;
+
+    int width = m_clientRect.width();
+    int height = m_clientRect.height();
+
+    DWORD cBytes = width * height * 4;
+    SkBaseDevice* device = (SkBaseDevice*)m_memoryCanvas->getTopDevice();
+    if (!device)
+        return nullptr;
+
+    const SkBitmap& bitmap = device->accessBitmap(false);
+    SkCanvas* tempCanvas = nullptr;
+    uint32_t* pixels = nullptr;
+
+    if (bitmap.info().width() != width || bitmap.info().height() != height) {
+        tempCanvas = skia::CreatePlatformCanvas(width, height, !m_hasTransparentBackground);
+        clearCanvas(tempCanvas, m_clientRect, m_hasTransparentBackground);
+        tempCanvas->drawBitmap(bitmap, 0, 0, nullptr);
+        device = (SkBaseDevice*)tempCanvas->getTopDevice();
+        if (!device) {
+            delete tempCanvas;
+            return nullptr;
+        }
+        const SkBitmap& tempBitmap = device->accessBitmap(false);
+        pixels = tempBitmap.getAddr32(0, 0);
+    } else
+        pixels = bitmap.getAddr32(0, 0);
+
+    m_compositeMutex.lock();
+
+    BitInfo* bitInfo = new BitInfo();
+    bitInfo->pixels = pixels;
+    bitInfo->tempCanvas = tempCanvas;
+    bitInfo->width = width;
+    bitInfo->height = height;
+    return bitInfo;
+}
+
+void LayerTreeHost::getBitEnd(const BitInfo* bitInfo)
+{
+    m_isDrawDirty = false;
+
+    if (bitInfo->tempCanvas) {
+        delete m_memoryCanvas;
+        m_memoryCanvas = bitInfo->tempCanvas;
+    }
+    m_compositeMutex.unlock();
+
+    delete bitInfo;
+}
+
 void LayerTreeHost::paintToBit(void* bits, int pitch)
 {
+#if 1
+    BitInfo* bitInfo = getBitBegin();
+    if (!bitInfo)
+        return;
+    uint32_t* pixels = bitInfo->pixels;;
+    int width = bitInfo->width;
+    int height = bitInfo->height;
+
+    if (pitch == 0 || pitch == width * 4) {
+        memcpy(bits, pixels, width * height * 4);
+    } else {
+        unsigned char* src = (unsigned char*)pixels;
+        unsigned char* dst = (unsigned char*)bits;
+        for (int i = 0; i < height; ++i) {
+            memcpy(dst, src, width * 4);
+            src += width * 4;
+            dst += pitch;
+        }
+    }
+    getBitEnd(bitInfo);
+#else
     WTF::Locker<WTF::Mutex> locker(m_compositeMutex);
     if (!m_memoryCanvas)
         return;
@@ -1206,6 +1299,8 @@ void LayerTreeHost::paintToBit(void* bits, int pitch)
         delete m_memoryCanvas;
         m_memoryCanvas = tempCanvas;
     }
+
+#endif
 }
 
 } // cc

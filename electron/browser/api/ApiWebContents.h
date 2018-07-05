@@ -2,7 +2,7 @@
 #ifndef browser_api_ApiWebContents_h
 #define browser_api_ApiWebContents_h
 
-#include "nodeblink.h"
+#include "node/nodeblink.h"
 #include "wke.h"
 #include "gin/dictionary.h"
 #include "common/api/EventEmitter.h"
@@ -35,6 +35,47 @@ public:
         unsigned styleEx;
         bool transparent;
         std::wstring title;
+        bool isShow;
+        bool isCenter;
+        bool isResizable;
+        bool isMinimizable;
+        bool isMaximizable;
+        bool isFrame;
+
+        bool isUseContentSize;
+        bool isAlwaysOnTop;
+        bool isClosable;
+
+        int minWidth;
+        int minHeight;
+        int maxWidth;
+        int maxHeight;
+
+        CreateWindowParam() {
+            x = 0;
+            y = 0;
+            width = 0;
+            height = 0;
+            styles = 0;
+            styleEx = 0;
+            transparent = false;
+
+            isShow = true;
+            isCenter = false;
+            isResizable = true;
+            isMinimizable = true;
+            isMaximizable = true;
+            isFrame = true;
+
+            isUseContentSize = false;
+            isAlwaysOnTop = false;
+            isClosable = true;
+
+            minWidth = 100;
+            minHeight = 100;
+            maxWidth = 500;
+            maxHeight = 500;
+        }
     };
 
     static void init(v8::Isolate* isolate, v8::Local<v8::Object> target, node::Environment* env);
@@ -47,12 +88,15 @@ public:
     void removeObserver(WebContentsObserver* observer);
 
     wkeWebView getWkeView() const { return m_view; }
+    WindowInterface* getOwner() const { return m_owner; }
 
     void onNewWindowInBlinkThread(int width, int height, const CreateWindowParam* createWindowParam);
 
     void rendererPostMessageToMain(const std::string& channel, const base::ListValue& listParams);
     void rendererSendMessageToMain(const std::string& channel, const base::ListValue& listParams, std::string* jsonRet);
     void anyPostMessageToRenderer(const std::string& channel, const base::ListValue& listParams);
+    static void rendererSendMessageToRenderer(wkeWebView view, wkeWebFrameHandle frame, const std::string& channel, const base::ListValue& args);
+
 private:
     static void newFunction(const v8::FunctionCallbackInfo<v8::Value>& args);
 
@@ -60,6 +104,8 @@ private:
     void _loadURLApi(const std::string& url);
     int getProcessIdApi() const;
     bool equalApi() const;
+
+    static void getFocusedWebContentsApi(const v8::FunctionCallbackInfo<v8::Value>& info);
 
     std::string _getURLApi();
 
@@ -205,16 +251,24 @@ private:
     void onDidCreateScriptContext(wkeWebView webView, void* frame, v8::Local<v8::Context>* context, int extensionGroup, int worldId);
     static void staticOnWillReleaseScriptContextCallback(wkeWebView webView, void* param, void* frame, void* context, int worldId);
     void onWillReleaseScriptContextCallback(wkeWebView webView, void* frame, v8::Local<v8::Context>* context, int worldId);
+
 public:
     static v8::Persistent<v8::Function> constructor;
     static gin::WrapperInfo kWrapperInfo;
 
 private:
+    friend class Window;
+
     NodeBindings* m_nodeBinding;
     int m_id;
     std::set<WebContentsObserver*> m_observers;
     wkeWebView m_view;
     WindowInterface* m_owner;
+
+    bool m_isNodeIntegration;
+    bool m_isLoading;
+
+    v8::Persistent<v8::Object> m_liveSelf;
 };
 
 } // atom

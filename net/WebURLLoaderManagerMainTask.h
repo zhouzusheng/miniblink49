@@ -4,6 +4,7 @@
 
 #include "net/WebURLLoaderInternal.h"
 #include "net/WebURLLoaderManagerUtil.h"
+#include "net/WebURLLoaderManagerAsynTask.h"
 #include "net/RequestExtraData.h"
 #include "content/browser/WebPage.h"
 #include "third_party/WebKit/Source/platform/network/HTTPParsers.h"
@@ -120,7 +121,7 @@ public:
             return;
         }
 
-        if (WebURLLoaderManager::sharedInstance()->isShutdown() || job->m_cancelled)
+        if (WebURLLoaderManager::sharedInstance()->isShutdown() || job->isCancelled())
             return;
 
         switch (m_type) {
@@ -131,8 +132,8 @@ public:
             handleHeaderCallbackOnMainThread(m_args, job);
             break;
         case kDidFinishLoading:
-            if (job->m_hookBuf)
-                WebURLLoaderManager::sharedInstance()->didReceiveDataOrDownload(job, static_cast<char*>(job->m_hookBuf), job->m_hookLength, 0);
+            if (job->m_hookBufForEndHook)
+                WebURLLoaderManager::sharedInstance()->didReceiveDataOrDownload(job, static_cast<char*>(job->m_hookBufForEndHook), job->m_hookLength, 0);
             WebURLLoaderManager::sharedInstance()->handleDidFinishLoading(job, 0, 0);
             break;
         case kRemoveFromCurl:
@@ -143,8 +144,8 @@ public:
             handleLocalReceiveResponseOnMainThread(m_args, job);
             break;
         case kContentEnded:
-            if (job->m_hookBuf)
-                job->m_multipartHandle->contentReceived(static_cast<const char*>(job->m_hookBuf), job->m_hookLength);
+            if (job->m_hookBufForEndHook)
+                job->m_multipartHandle->contentReceived(static_cast<const char*>(job->m_hookBufForEndHook), job->m_hookLength);
             job->m_multipartHandle->contentEnded();
             break;
         case kDidFail:
@@ -225,6 +226,7 @@ static bool dispatchResponseToWke(WebURLLoaderInternal* job, const AtomicString&
     if (equalIgnoringCase(contentType, "application/octet-stream") ||
         equalIgnoringCase(contentType, "application/zip") ||
         equalIgnoringCase(contentType, "application/rar") ||
+        equalIgnoringCase(contentType, "application/x-7z-compressed") ||
         contentDispositionType(job->m_response.httpHeaderField("Content-Disposition")) == ContentDispositionAttachment) {
         if (page->wkeHandler().downloadCallback) {
             if (page->wkeHandler().downloadCallback(page->wkeWebView(), page->wkeHandler().downloadCallbackParam, urlBuf.data())) {
@@ -237,6 +239,192 @@ static bool dispatchResponseToWke(WebURLLoaderInternal* job, const AtomicString&
     return false;
 }
 #endif
+
+wkeResourceType WebURLRequestToResourceType(const blink::WebURLRequest& request)
+{
+    blink::WebURLRequest::RequestContext requestContext = request.requestContext();
+    if (request.frameType() != blink::WebURLRequest::FrameTypeNone) {
+        ASSERT(requestContext == blink::WebURLRequest::RequestContextForm ||
+            requestContext == blink::WebURLRequest::RequestContextFrame ||
+            requestContext == blink::WebURLRequest::RequestContextHyperlink ||
+            requestContext == blink::WebURLRequest::RequestContextIframe ||
+            requestContext == blink::WebURLRequest::RequestContextInternal ||
+            requestContext == blink::WebURLRequest::RequestContextLocation);
+        if (request.frameType() == WebURLRequest::FrameTypeTopLevel ||
+            request.frameType() == WebURLRequest::FrameTypeAuxiliary) {
+            return WKE_RESOURCE_TYPE_MAIN_FRAME;
+        }
+        if (request.frameType() == WebURLRequest::FrameTypeNested)
+            return WKE_RESOURCE_TYPE_SUB_FRAME;
+        DebugBreak();
+        return WKE_RESOURCE_TYPE_SUB_RESOURCE;
+    }
+
+    switch (requestContext) {
+        // Favicon
+    case blink::WebURLRequest::RequestContextFavicon:
+        return WKE_RESOURCE_TYPE_FAVICON;
+
+        // Font
+    case blink::WebURLRequest::RequestContextFont:
+        return WKE_RESOURCE_TYPE_FONT_RESOURCE;
+
+        // Image
+    case blink::WebURLRequest::RequestContextImage:
+    case blink::WebURLRequest::RequestContextImageSet:
+        return WKE_RESOURCE_TYPE_IMAGE;
+
+        // Media
+    case blink::WebURLRequest::RequestContextAudio:
+    case blink::WebURLRequest::RequestContextVideo:
+        return WKE_RESOURCE_TYPE_MEDIA;
+
+        // Object
+    case blink::WebURLRequest::RequestContextEmbed:
+    case blink::WebURLRequest::RequestContextObject:
+        return WKE_RESOURCE_TYPE_OBJECT;
+
+        // Ping
+    case blink::WebURLRequest::RequestContextBeacon:
+    case blink::WebURLRequest::RequestContextCSPReport:
+    case blink::WebURLRequest::RequestContextPing:
+        return WKE_RESOURCE_TYPE_PING;
+
+        // Prefetch
+    case blink::WebURLRequest::RequestContextPrefetch:
+        return WKE_RESOURCE_TYPE_PREFETCH;
+
+        // Script
+    case blink::WebURLRequest::RequestContextImport:
+    case blink::WebURLRequest::RequestContextScript:
+        return WKE_RESOURCE_TYPE_SCRIPT;
+
+        // Style
+    case WebURLRequest::RequestContextXSLT:
+    case WebURLRequest::RequestContextStyle:
+        return WKE_RESOURCE_TYPE_STYLESHEET;
+
+        // Subresource
+    case blink::WebURLRequest::RequestContextDownload:
+    case blink::WebURLRequest::RequestContextManifest:
+    case blink::WebURLRequest::RequestContextSubresource:
+    case blink::WebURLRequest::RequestContextPlugin:
+        return WKE_RESOURCE_TYPE_SUB_RESOURCE;
+
+        // TextTrack
+    case blink::WebURLRequest::RequestContextTrack:
+        return WKE_RESOURCE_TYPE_MEDIA;
+
+        // Workers
+    case blink::WebURLRequest::RequestContextServiceWorker:
+        return WKE_RESOURCE_TYPE_SERVICE_WORKER;
+    case blink::WebURLRequest::RequestContextSharedWorker:
+        return WKE_RESOURCE_TYPE_SHARED_WORKER;
+    case blink::WebURLRequest::RequestContextWorker:
+        return WKE_RESOURCE_TYPE_WORKER;
+
+        // Unspecified
+    case blink::WebURLRequest::RequestContextInternal:
+    case blink::WebURLRequest::RequestContextUnspecified:
+        return WKE_RESOURCE_TYPE_SUB_RESOURCE;
+
+        // XHR
+    case WebURLRequest::RequestContextEventSource:
+    case WebURLRequest::RequestContextFetch:
+    case WebURLRequest::RequestContextXMLHttpRequest:
+        return WKE_RESOURCE_TYPE_XHR;
+
+        // These should be handled by the FrameType checks at the top of the
+        // function.
+    case blink::WebURLRequest::RequestContextForm:
+    case blink::WebURLRequest::RequestContextHyperlink:
+    case blink::WebURLRequest::RequestContextLocation:
+    case blink::WebURLRequest::RequestContextFrame:
+    case blink::WebURLRequest::RequestContextIframe:
+        DebugBreak();
+        return WKE_RESOURCE_TYPE_SUB_RESOURCE;
+
+    default:
+        DebugBreak();
+        return WKE_RESOURCE_TYPE_SUB_RESOURCE;
+    }
+}
+
+static void distpatchWkeWillSendRequest(WebURLLoaderInternal* job, const KURL* newURL, long httpCode)
+{
+    net::RequestExtraData* requestExtraData = (net::RequestExtraData*)job->firstRequest()->extraData();
+    if (!requestExtraData)
+        return;
+
+    content::WebPage* page = requestExtraData->page;
+    if (!page->wkeHandler().otherLoadCallback)
+        return;
+
+    Vector<UChar> url = WTF::ensureUTF16UChar(job->firstRequest()->url().string(), false);
+    Vector<UChar> newUrl;
+    if (newURL)
+        newUrl = WTF::ensureUTF16UChar(newURL->getUTF8String(), false);
+    Vector<UChar> method = WTF::ensureUTF16UChar(job->firstRequest()->httpMethod(), false);
+    Vector<UChar> referrer = WTF::ensureUTF16UChar(job->firstRequest()->httpHeaderField(blink::WebString::fromUTF8("Referer")), false);
+    
+    wkeTempCallbackInfo* info = wkeGetTempCallbackInfo(page->wkeWebView());
+    info->willSendRequestInfo = new wkeWillSendRequestInfo();
+    info->willSendRequestInfo->isHolded = false;
+    info->willSendRequestInfo->url = wkeCreateStringW(url.data(), url.size());
+    info->willSendRequestInfo->newUrl = newURL ? wkeCreateStringW(newUrl.data(), newUrl.size()) : nullptr;
+    info->willSendRequestInfo->resourceType = WebURLRequestToResourceType(*job->firstRequest());
+    info->willSendRequestInfo->httpResponseCode = httpCode;
+    info->willSendRequestInfo->method = wkeCreateStringW(method.data(), method.size());
+    info->willSendRequestInfo->referrer = wkeCreateStringW(referrer.data(), referrer.size());
+    info->willSendRequestInfo->headers = nullptr;
+
+    page->wkeHandler().otherLoadCallback(page->wkeWebView(), page->wkeHandler().otherLoadCallbackParam,
+        newURL ? WKE_DID_GET_REDIRECT_REQUEST : WKE_DID_GET_RESPONSE_DETAILS,
+        info);
+
+    if (!info->willSendRequestInfo->isHolded) {
+        wkeDeleteWillSendRequestInfo(page->wkeWebView(), info->willSendRequestInfo);
+        info->willSendRequestInfo = nullptr;
+    }
+}
+
+static bool doRedirect(WebURLLoaderInternal* job, const String& location, WebURLLoaderManagerMainTask::Args* args)
+{
+    WebURLLoaderClient* client = job->client();
+    KURL newURL = KURL((KURL)(job->firstRequest()->url()), location);
+
+#if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
+    distpatchWkeWillSendRequest(job, &newURL, args->httpCode);
+
+    RequestExtraData* requestExtraData = reinterpret_cast<RequestExtraData*>(job->firstRequest()->extraData());
+    WebPage* page = requestExtraData->page;
+    wkeLoadUrlBeginCallback loadUrlBeginCallback = page->wkeHandler().loadUrlBeginCallback;
+    void* param = page->wkeHandler().loadUrlBeginCallbackParam;
+
+    if (loadUrlBeginCallback) {
+        CString newURLBuf(newURL.getUTF8String().utf8());
+        if (loadUrlBeginCallback(page->wkeWebView(), param, newURLBuf.data(), job)) {
+            WebURLLoaderManager::sharedInstance()->cancelWithHookRedirect(job);
+
+            if (job->m_isWkeNetSetDataBeSetted)
+                Platform::current()->currentThread()->scheduler()->postLoadingTask(FROM_HERE, new WkeAsynTask(WebURLLoaderManager::sharedInstance(), job->m_id));
+
+            return false;
+        }
+    }
+#endif
+
+    blink::WebURLRequest* redirectedRequest = new blink::WebURLRequest(*job->firstRequest());
+    redirectedRequest->setURL(newURL);
+    if (client && job->loader())
+        client->willSendRequest(job->loader(), *redirectedRequest, job->m_response);
+
+    job->m_response.initialize();
+
+    delete job->m_firstRequest;
+    job->m_firstRequest = redirectedRequest;
+    return false;
+}
 
 static bool setHttpResponseDataToJobWhenDidReceiveResponseOnMainThread(WebURLLoaderInternal* job, WebURLLoaderManagerMainTask::Args* args)
 {
@@ -274,29 +462,16 @@ static bool setHttpResponseDataToJobWhenDidReceiveResponseOnMainThread(WebURLLoa
             job->m_multipartHandle = adoptPtr(new MultipartHandle(job, boundary));
     }
 
-    // HTTP redirection
+    // HTTP redirection 重定向
     if (isHttpRedirect(args->httpCode)) {
         String location = job->m_response.httpHeaderField(WebString::fromUTF8("location"));
         if (!location.isEmpty()) {
-            //重定向
-            KURL newURL = KURL((KURL)(job->firstRequest()->url()), location);
-            blink::WebURLRequest* redirectedRequest = new blink::WebURLRequest(*job->firstRequest());
-            redirectedRequest->setURL(newURL);
-            if (client && job->loader())
-                client->willSendRequest(job->loader(), *redirectedRequest, job->m_response);
-#if 0
-            String outString = String::format("redirection:%p, %s\n", job, job->m_response.url().string().utf8().c_str());
-            OutputDebugStringW(outString.charactersWithNullTermination().data());
-#endif
-            job->m_response.initialize();
-
-            delete job->m_firstRequest;
-            job->m_firstRequest = redirectedRequest;
-            return false;
+            return doRedirect(job, location, args);
         }
     } else if (isHttpAuthentication(args->httpCode)) {
 
-    }
+    } else
+        distpatchWkeWillSendRequest(job, nullptr, args->httpCode);
 
     return true;
 }
@@ -309,7 +484,7 @@ static void setResponseDataToJobWhenDidReceiveResponseOnMainThread(WebURLLoaderI
     if (url.protocolIsInHTTPFamily())
         needSetResponseFired = setHttpResponseDataToJobWhenDidReceiveResponseOnMainThread(job, args);
 
-    if (needSetResponseFired && !job->m_cancelled) {
+    if (needSetResponseFired && !job->isCancelled()) {
         if (job->client() && job->loader())
             WebURLLoaderManager::sharedInstance()->handleDidReceiveResponse(job);
         job->setResponseFired(true);
@@ -346,17 +521,17 @@ size_t WebURLLoaderManagerMainTask::handleWriteCallbackOnMainThread(WebURLLoader
 
     if (!job->responseFired()) {
         handleLocalReceiveResponseOnMainThread(args, job);
-        if (job->m_cancelled)
+        if (job->isCancelled())
             return 0;
     }
 
     if (job->m_isHookRequest) {
-        if (!job->m_hookBuf) {
-            job->m_hookBuf = malloc(totalSize);
+        if (!job->m_hookBufForEndHook) {
+            job->m_hookBufForEndHook = malloc(totalSize);
         } else {
-            job->m_hookBuf = realloc(job->m_hookBuf, job->m_hookLength + totalSize);
+            job->m_hookBufForEndHook = realloc(job->m_hookBufForEndHook, job->m_hookLength + totalSize);
         }
-        memcpy(((char *)job->m_hookBuf + job->m_hookLength), ptr, totalSize);
+        memcpy(((char *)job->m_hookBufForEndHook + job->m_hookLength), ptr, totalSize);
         job->m_hookLength += totalSize;
         return totalSize;
     }
@@ -371,7 +546,7 @@ size_t WebURLLoaderManagerMainTask::handleWriteCallbackOnMainThread(WebURLLoader
 
 size_t WebURLLoaderManagerMainTask::handleHeaderCallbackOnMainThread(WebURLLoaderManagerMainTask::Args* args, WebURLLoaderInternal* job)
 {
-    if (job->m_cancelled)
+    if (job->isCancelled())
         return 0;
 
     // We should never be called when deferred loading is activated.
@@ -435,7 +610,7 @@ void WebURLLoaderManagerMainTask::handleHookRequestOnMainThread(WebURLLoaderInte
         Vector<char> urlBuf = WTF::ensureStringToUTF8(job->firstRequest()->url().string(), true);
         page->wkeHandler().loadUrlEndCallback(page->wkeWebView(), page->wkeHandler().loadUrlEndCallbackParam,
             urlBuf.data(), job,
-            job->m_hookBuf, job->m_hookLength);
+            job->m_hookBufForEndHook, job->m_hookLength);
     }
 }
 

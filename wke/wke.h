@@ -7,7 +7,9 @@
 *
 */
 
-#ifndef WKE_H
+#include "wkedefine.h"
+
+#if 0
 #define WKE_H
 
 //////////////////////////////////////////////////////////////////////////
@@ -129,6 +131,11 @@ typedef struct {
     unsigned int mask;
 } wkeSettings;
 
+typedef struct {
+    int size;
+    unsigned int bgColor;
+} wkeViewSettings;
+
 /*
 *c interface
 *----------------------------------------------------------------------------------------------------------
@@ -232,7 +239,8 @@ WKE_API void wkeInitializeEx(const wkeSettings* settings);
 WKE_API void wkeConfigure(const wkeSettings* settings);
 WKE_API bool wkeIsInitialize();
 
-WKE_API void wkeSetDebugConfig(wkeWebView webView, const char* debugString);
+WKE_API void wkeSetViewSettings(wkeWebView webView, const wkeViewSettings* settings);
+WKE_API void wkeSetDebugConfig(wkeWebView webView, const char* debugString, const char* param);
 
 WKE_API void wkeFinalize();
 WKE_API void wkeUpdate();
@@ -244,9 +252,13 @@ WKE_API wkeWebView wkeGetWebView(const char* name);
 WKE_API void wkeDestroyWebView(wkeWebView webView);
 
 WKE_API void wkeSetMemoryCacheEnable(wkeWebView webView, bool b);
-
+WKE_API void wkeSetTouchEnabled(wkeWebView webView, bool b);
 WKE_API void wkeSetNavigationToNewWindowEnable(wkeWebView webView, bool b);
 WKE_API void wkeSetCspCheckEnable(wkeWebView webView, bool b);
+WKE_API void wkeSetNpapiPluginsEnabled(wkeWebView webView, bool b);
+WKE_API void wkeSetHeadlessEnabled(wkeWebView webView, bool b);
+WKE_API void wkeSetDragEnable(wkeWebView webView, bool b);
+
 WKE_API void wkeSetViewNetInterface(wkeWebView webView, const char* netInterface);
 
 WKE_API void wkeSetProxy(const wkeProxy* proxy);
@@ -398,26 +410,52 @@ WKE_API wkeWebView wkeGetWebViewForCurrentContext();
 WKE_API void wkeSetUserKeyValue(wkeWebView webView, const char* key, void* value);
 WKE_API void* wkeGetUserKeyValue(wkeWebView webView, const char* key);
 
-#define WkeCursorInfoPointer 0
-#define WkeCursorInfoCross 1
-#define WkeCursorInfoHand 2
-#define WkeCursorInfoIBeam 3
-#define WkeCursorInfoWait 4
-#define WkeCursorInfoHelp 5
-#define WkeCursorInfoEastResize 6
-#define WkeCursorInfoNorthResize 7
-#define WkeCursorInfoNorthEastResize 8
-#define WkeCursorInfoNorthWestResize 9
-#define WkeCursorInfoSouthResize 10
-#define WkeCursorInfoSouthEastResize 11
-#define WkeCursorInfoSouthWestResize 12
-#define WkeCursorInfoWestResize 13
-#define WkeCursorInfoNorthSouthResize 14
-#define WkeCursorInfoEastWestResize 15
-#define WkeCursorInfoNorthEastSouthWestResize 16
-#define WkeCursorInfoNorthWestSouthEastResize 17
-#define WkeCursorInfoColumnResize 18
-#define WkeCursorInfoRowResize 19
+enum WkeCursorInfoType {
+    WkeCursorInfoPointer,
+    WkeCursorInfoCross,
+    WkeCursorInfoHand,
+    WkeCursorInfoIBeam,
+    WkeCursorInfoWait,
+    WkeCursorInfoHelp,
+    WkeCursorInfoEastResize,
+    WkeCursorInfoNorthResize,
+    WkeCursorInfoNorthEastResize,
+    WkeCursorInfoNorthWestResize,
+    WkeCursorInfoSouthResize,
+    WkeCursorInfoSouthEastResize,
+    WkeCursorInfoSouthWestResize,
+    WkeCursorInfoWestResize,
+    WkeCursorInfoNorthSouthResize,
+    WkeCursorInfoEastWestResize,
+    WkeCursorInfoNorthEastSouthWestResize,
+    WkeCursorInfoNorthWestSouthEastResize,
+    WkeCursorInfoColumnResize,
+    WkeCursorInfoRowResize,
+    WkeCursorInfoMiddlePanning,
+    WkeCursorInfoEastPanning,
+    WkeCursorInfoNorthPanning,
+    WkeCursorInfoNorthEastPanning,
+    WkeCursorInfoNorthWestPanning,
+    WkeCursorInfoSouthPanning,
+    WkeCursorInfoSouthEastPanning,
+    WkeCursorInfoSouthWestPanning,
+    WkeCursorInfoWestPanning,
+    WkeCursorInfoMove,
+    WkeCursorInfoVerticalText,
+    WkeCursorInfoCell,
+    WkeCursorInfoContextMenu,
+    WkeCursorInfoAlias,
+    WkeCursorInfoProgress,
+    WkeCursorInfoNoDrop,
+    WkeCursorInfoCopy,
+    WkeCursorInfoNone,
+    WkeCursorInfoNotAllowed,
+    WkeCursorInfoZoomIn,
+    WkeCursorInfoZoomOut,
+    WkeCursorInfoGrab,
+    WkeCursorInfoGrabbing,
+    WkeCursorInfoCustom
+};
 
 WKE_API int wkeGetCursorInfoType(wkeWebView webView);
 WKE_API void wkeSetDragFiles(wkeWebView webView, const POINT* clintPos, const POINT* screenPos, wkeString files[], int filesCount);
@@ -428,15 +466,19 @@ WKE_API void wkeOnBlinkWindowCreate();
 //wke callback-----------------------------------------------------------------------------------
 typedef void(*wkeTitleChangedCallback)(wkeWebView webView, void* param, const wkeString title);
 WKE_API void wkeOnTitleChanged(wkeWebView webView, wkeTitleChangedCallback callback, void* callbackParam);
+WKE_API void wkeOnMouseOverUrlChanged(wkeWebView webView, wkeTitleChangedCallback callback, void* callbackParam);
 
 typedef void(*wkeURLChangedCallback)(wkeWebView webView, void* param, const wkeString url);
 WKE_API void wkeOnURLChanged(wkeWebView webView, wkeURLChangedCallback callback, void* callbackParam);
 
-typedef void(*wkeURLChangedCallback2)(wkeWebView webView, void* param, wkeWebFrameHandle frame, const wkeString url);
+typedef void(*wkeURLChangedCallback2)(wkeWebView webView, void* param, wkeWebFrameHandle frameId, const wkeString url);
 WKE_API void wkeOnURLChanged2(wkeWebView webView, wkeURLChangedCallback2 callback, void* callbackParam);
 
 typedef void(*wkePaintUpdatedCallback)(wkeWebView webView, void* param, const HDC hdc, int x, int y, int cx, int cy);
 WKE_API void wkeOnPaintUpdated(wkeWebView webView, wkePaintUpdatedCallback callback, void* callbackParam);
+
+typedef void(*wkePaintBitUpdatedCallback)(wkeWebView webView, void* param, const void* buffer, const wkeRect* r, int width, int height);
+WKE_API void wkeOnPaintBitUpdated(wkeWebView webView, wkePaintBitUpdatedCallback callback, void* callbackParam);
 
 typedef void(*wkeAlertBoxCallback)(wkeWebView webView, void* param, const wkeString msg);
 WKE_API void wkeOnAlertBox(wkeWebView webView, wkeAlertBoxCallback callback, void* callbackParam);
@@ -480,7 +522,7 @@ WKE_API void wkeOnCreateView(wkeWebView webView, wkeCreateViewCallback callback,
 typedef void(*wkeDocumentReadyCallback)(wkeWebView webView, void* param);
 WKE_API void wkeOnDocumentReady(wkeWebView webView, wkeDocumentReadyCallback callback, void* param);
 
-typedef void(*wkeDocumentReady2Callback)(wkeWebView webView, void* param, wkeWebFrameHandle frame);
+typedef void(*wkeDocumentReady2Callback)(wkeWebView webView, void* param, wkeWebFrameHandle frameId);
 WKE_API void wkeOnDocumentReady2(wkeWebView webView, wkeDocumentReady2Callback callback, void* param);
 
 typedef enum {
@@ -518,10 +560,10 @@ WKE_API void wkeOnLoadUrlBegin(wkeWebView webView, wkeLoadUrlBeginCallback callb
 typedef void(*wkeLoadUrlEndCallback)(wkeWebView webView, void* param, const char *url, void *job, void* buf, int len);
 WKE_API void wkeOnLoadUrlEnd(wkeWebView webView, wkeLoadUrlEndCallback callback, void* callbackParam);
 
-typedef void(*wkeDidCreateScriptContextCallback)(wkeWebView webView, void* param, wkeWebFrameHandle frame, void* context, int extensionGroup, int worldId);
+typedef void(*wkeDidCreateScriptContextCallback)(wkeWebView webView, void* param, wkeWebFrameHandle frameId, void* context, int extensionGroup, int worldId);
 WKE_API void wkeOnDidCreateScriptContext(wkeWebView webView, wkeDidCreateScriptContextCallback callback, void* callbackParam);
 
-typedef void(*wkeWillReleaseScriptContextCallback)(wkeWebView webView, void* param, wkeWebFrameHandle frame, void* context, int worldId);
+typedef void(*wkeWillReleaseScriptContextCallback)(wkeWebView webView, void* param, wkeWebFrameHandle frameId, void* context, int worldId);
 WKE_API void wkeOnWillReleaseScriptContext(wkeWebView webView, wkeWillReleaseScriptContextCallback callback, void* callbackParam);
 
 WKE_API void wkeNetSetMIMEType(void* job, char *type);
@@ -538,12 +580,14 @@ WKE_API void wkeNetOnResponse(wkeWebView webView, wkeNetResponseCallback callbac
 
 WKE_API void wkeNetGetMIMEType(void* job, wkeString mime);
 
-WKE_API bool wkeWebFrameIsMainFrame(wkeWebFrameHandle webFrame);
-WKE_API bool wkeIsWebRemoteFrame(wkeWebFrameHandle webFrame);
+WKE_API bool wkeIsMainFrame(wkeWebView webView, wkeWebFrameHandle frameId);
+WKE_API bool wkeIsWebRemoteFrame(wkeWebView webView, wkeWebFrameHandle frameId);
 WKE_API wkeWebFrameHandle wkeWebFrameGetMainFrame(wkeWebView webView);
+WKE_API jsValue wkeRunJsByFrame(wkeWebView webView, wkeWebFrameHandle frameId, const utf8* script, bool isInClosure);
+//WKE_API const utf8* wkeGetFrameUrl(wkeWebView webView, wkeWebFrameHandle frameId);
 
 typedef void* v8ContextPtr;
-WKE_API void wkeWebFrameGetMainWorldScriptContext(wkeWebFrameHandle frame, v8ContextPtr contextOut);
+WKE_API void wkeWebFrameGetMainWorldScriptContext(wkeWebView webView, wkeWebFrameHandle webFrameId, v8ContextPtr contextOut);
 
 typedef void* v8Isolate;
 WKE_API v8Isolate wkeGetBlinkMainThreadIsolate();
@@ -682,6 +726,7 @@ typedef enum {
     JSTYPE_OBJECT,
     JSTYPE_FUNCTION,
     JSTYPE_UNDEFINED,
+    JSTYPE_ARRAY,
 } jsType;
 
 WKE_API void jsBindFunction(const char* name, jsNativeFunction fn, unsigned int argCount);
@@ -749,13 +794,13 @@ WKE_API jsValue jsFunction(jsExecState es, jsData* obj);
 WKE_API jsData* jsGetData(jsExecState es, jsValue object);
 
 WKE_API jsValue jsGet(jsExecState es, jsValue object, const char* prop);
-WKE_API void   jsSet(jsExecState es, jsValue object, const char* prop, jsValue v);
+WKE_API void jsSet(jsExecState es, jsValue object, const char* prop, jsValue v);
 
 WKE_API jsValue jsGetAt(jsExecState es, jsValue object, int index);
-WKE_API void   jsSetAt(jsExecState es, jsValue object, int index, jsValue v);
+WKE_API void jsSetAt(jsExecState es, jsValue object, int index, jsValue v);
 
-WKE_API int     jsGetLength(jsExecState es, jsValue object);
-WKE_API void    jsSetLength(jsExecState es, jsValue object, int length);
+WKE_API int jsGetLength(jsExecState es, jsValue object);
+WKE_API void jsSetLength(jsExecState es, jsValue object, int length);
 
 //window object
 WKE_API jsValue jsGlobalObject(jsExecState es);

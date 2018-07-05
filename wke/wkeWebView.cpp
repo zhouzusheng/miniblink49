@@ -11,12 +11,13 @@
 #include "content/web_impl_win/BlinkPlatformImpl.h"
 #include "content/web_impl_win/WebCookieJarCurlImpl.h"
 #include "content/browser/WebFrameClientImpl.h"
-
 #include "third_party/WebKit/public/platform/WebDragData.h"
+#include "third_party/WebKit/public/platform/WebThread.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebScriptSource.h"
 #include "third_party/WebKit/Source/web/WebViewImpl.h"
 #include "third_party/WebKit/Source/web/WebSettingsImpl.h"
+#include "third_party/WebKit/Source/platform/UserGestureIndicator.h"
 #include "third_party/WebKit/Source/bindings/core/v8/ExceptionState.h"
 #include "third_party/WebKit/Source/wtf/text/WTFStringUtil.h"
 
@@ -31,16 +32,20 @@ CWebView::CWebView()
     , m_transparent(false)
     , m_width(0)
     , m_height(0)
+    , m_zoomFactor(1)
     , m_awake(true)
     , m_title("", 0)
     , m_cookie("", 0)
-    , m_name("", 0)
+    , m_name("miniblink", 0)
     , m_url("", 0)
     , m_isCokieEnabled(true)
+    , m_isCreatedDevTools(false)
 {
     _initPage();
     _initHandler();
     _initMemoryDC();
+
+    m_settings.size = 0;
     m_webPage->wkeHandler().isWke = true;
 }
 
@@ -112,6 +117,7 @@ void CWebView::loadPostURL(const utf8* inUrl, const char * poastData, int nLen )
     request.setHTTPMethod(blink::WebString::fromUTF8("POST"));
 
     blink::WebHTTPBody body;
+    body.initialize();
     body.appendData(blink::WebData(poastData, nLen));
     request.setHTTPBody(body);
     m_webPage->loadRequest(content::WebPage::kMainFrameId, request);
@@ -120,6 +126,17 @@ void CWebView::loadPostURL(const utf8* inUrl, const char * poastData, int nLen )
 void CWebView::loadPostURL(const wchar_t * inUrl,const char * poastData, int nLen)
 {
     loadPostURL(String(inUrl).utf8().data(), poastData,nLen);
+}
+
+static bool checkIsFileUrl(const utf8* inUrl)
+{
+    if (nullptr != strstr(inUrl, "http:"))
+        return false;
+    if (nullptr != strstr(inUrl, "https:"))
+        return false;
+    if (nullptr != strstr(inUrl, "file:"))
+        return true;
+    return false;
 }
 
 static bool trimPathBody(const utf8* inUrl, int length, bool isFile, std::vector<char>* out)
@@ -137,8 +154,10 @@ static bool trimPathBody(const utf8* inUrl, int length, bool isFile, std::vector
         Vector<WCHAR> filenameBuffer;
         filenameBuffer.resize(MAX_PATH + 3);
 
-        ::GetModuleFileNameW(NULL, filenameBuffer.data(), MAX_PATH);
-        ::PathRemoveFileSpecW(filenameBuffer.data());
+//         ::GetModuleFileNameW(NULL, filenameBuffer.data(), MAX_PATH);
+//         ::PathRemoveFileSpecW(filenameBuffer.data());
+        ::GetCurrentDirectory(MAX_PATH, filenameBuffer.data());
+
         int pathLength = wcslen(filenameBuffer.data());
         if (pathLength <= 1 || pathLength > MAX_PATH)
             return false;
@@ -215,7 +234,7 @@ void CWebView::_loadURL(const utf8* inUrl, bool isFile)
 
 void CWebView::loadURL(const utf8* inUrl)
 {
-    _loadURL(inUrl, false);
+    _loadURL(inUrl, checkIsFileUrl(inUrl));
 }
 
 void CWebView::loadURL(const wchar_t* url)
@@ -235,7 +254,7 @@ static String createMemoryUrl()
     result = WTF::ensureUTF16String(result);
     result.replace(L"\\", L"/");
     result.insert(L"file:///", 0);
-    result.append(String::format("/data_%d.htm", GetTickCount()));
+    result.append(String::format("/_miniblink__data_%d.htm", GetTickCount()));
 
     return WTF::ensureStringToUTF8String(result);
 }
@@ -304,18 +323,21 @@ bool CWebView::isLoading() const
 bool CWebView::isLoadingSucceeded() const
 {
     content::WebFrameClientImpl* frameClient = m_webPage->webFrameClientImpl();
-    return frameClient->isLoaded();
+    bool b = frameClient->isLoaded();
+    return b;
 }
 
 bool CWebView::isLoadingFailed() const
 {
     content::WebFrameClientImpl* frameClient = m_webPage->webFrameClientImpl();
-    return frameClient->isLoadFailed();
+    bool b = frameClient->isLoadFailed();
+    return b;
 }
 
 bool CWebView::isLoadingCompleted() const
 {
-    return isLoadingSucceeded() || isLoadingFailed();
+    bool b = isLoadingSucceeded() || isLoadingFailed();
+    return b;
 }
 
 bool CWebView::isDocumentReady() const
@@ -480,6 +502,17 @@ void CWebView::setHandleOffset(int x, int y)
 {
     blink::IntPoint offset(x, y);
     m_webPage->setHwndRenderOffset(offset);
+}
+
+void CWebView::setViewSettings(const wkeViewSettings* settings)
+{
+    if (!settings)
+        return;
+
+    m_settings = *settings;
+
+    if (m_webPage)
+        m_webPage->setBackgroundColor(m_settings.bgColor);
 }
 
 void CWebView::paint(void* bits, int pitch)
@@ -824,13 +857,26 @@ wkeRect CWebView::caretRect()
     return rect;
 }
 
-static jsValue runJSImpl(blink::WebFrame* mainFrame, String* codeString)
+int64_t CWebView::wkeWebFrameHandleToFrameId(content::WebPage* page, wkeWebFrameHandle frameId)
 {
+    return (int64_t)frameId + page->getFirstFrameId() - 1;
+}
+
+wkeWebFrameHandle CWebView::frameIdTowkeWebFrameHandle(content::WebPage* page, int64_t frameId)
+{
+    return (wkeWebFrameHandle)(frameId - page->getFirstFrameId() + 1);
+}
+
+static jsValue runJsImpl(blink::WebFrame* mainFrame, String* codeString, bool isInClosure)
+{
+    blink::UserGestureIndicator gestureIndicator(blink::DefinitelyProcessingUserGesture);
+
     if (codeString->startsWith("javascript:", WTF::TextCaseInsensitive))
         codeString->remove(0, sizeof("javascript:") - 1);
-    codeString->insert("(function(){", 0);
-    codeString->append("})();");
-
+    if (isInClosure) {
+        codeString->insert("(function(){", 0);
+        codeString->append("})();");
+    }
     blink::WebScriptSource code(*codeString, KURL(ParsedURLString, "CWebView::runJS"));
     blink::Frame* coreFrame = blink::toCoreFrame(mainFrame);
     if (!mainFrame || !coreFrame || !coreFrame->isLocalFrame())
@@ -850,7 +896,7 @@ jsValue CWebView::runJS(const wchar_t* script)
         return jsUndefined();
 
     String codeString(script);
-    return runJSImpl(m_webPage->mainFrame(), &codeString);
+    return runJsImpl(m_webPage->mainFrame(), &codeString, true);
 }
 
 jsValue CWebView::runJS(const utf8* script)
@@ -859,7 +905,19 @@ jsValue CWebView::runJS(const utf8* script)
         return jsUndefined();
 
     String codeString = String::fromUTF8(script);
-    return runJSImpl(m_webPage->mainFrame(), &codeString);
+    return runJsImpl(m_webPage->mainFrame(), &codeString, true);
+}
+
+jsValue CWebView::runJsInFrame(wkeWebFrameHandle frameId, const utf8* script, bool isInClosure)
+{
+    if (!m_webPage)
+        return jsUndefined();
+    blink::WebFrame* webFrame = m_webPage->getWebFrameFromFrameId(wkeWebFrameHandleToFrameId(m_webPage, frameId));
+    if (!webFrame)
+        return jsUndefined();
+
+    String codeString = String::fromUTF8(script);
+    return runJsImpl(webFrame, &codeString, isInClosure);
 }
 
 jsExecState CWebView::globalExec()
@@ -868,6 +926,15 @@ jsExecState CWebView::globalExec()
     v8::HandleScope handleScope(isolate);
 
     return wke::createTempExecStateByV8Context(m_webPage->mainFrame()->mainWorldScriptContext());
+}
+
+jsExecState CWebView::globalExecByFrame(wkeWebFrameHandle frameId)
+{
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::HandleScope handleScope(isolate);
+
+    blink::WebFrame* webFrame = m_webPage->getWebFrameFromFrameId(wkeWebFrameHandleToFrameId(m_webPage, frameId));
+    return wke::createTempExecStateByV8Context(webFrame->mainWorldScriptContext());
 }
 
 void CWebView::sleep()
@@ -894,22 +961,18 @@ void CWebView::setZoomFactor(float factor)
     //m_mainFrame->setPageZoomFactor(factor);
     if (!m_webPage)
         return;
-    
+
     WebViewImpl* view = m_webPage->webViewImpl();
-    if (view)
+    if (view) {
         view->setZoomFactorOverride(factor);
+        m_zoomFactor = factor;
+    }
 }
 
 float CWebView::zoomFactor() const
 {
     //return m_mainFrame->pageZoomFactor();
-    if (!m_webPage)
-        return 1.0;
-    
-    WebViewImpl* view = m_webPage->webViewImpl();
-    if (view)
-        return view->zoomLevelToZoomFactor(view->zoomLevel());
-    return 1.0;
+    return m_zoomFactor;
 }
 
 void CWebView::setEditable(bool editable)
@@ -928,6 +991,12 @@ void CWebView::onTitleChanged(wkeTitleChangedCallback callback, void* callbackPa
     m_webPage->wkeHandler().titleChangedCallbackParam = callbackParam;
 }
 
+void CWebView::onMouseOverUrlChanged(wkeTitleChangedCallback callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().mouseOverUrlChangedCallback = callback;
+    m_webPage->wkeHandler().mouseOverUrlChangedCallbackParam = callbackParam;
+}
+
 void CWebView::onURLChanged(wkeURLChangedCallback callback, void* callbackParam)
 {
     m_webPage->wkeHandler().urlChangedCallback = callback;
@@ -944,6 +1013,12 @@ void CWebView::onPaintUpdated(wkePaintUpdatedCallback callback, void* callbackPa
 {
     m_webPage->wkeHandler().paintUpdatedCallback = callback;
     m_webPage->wkeHandler().paintUpdatedCallbackParam = callbackParam;
+}
+
+void CWebView::onPaintBitUpdated(wkePaintBitUpdatedCallback callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().paintBitUpdatedCallback = callback;
+    m_webPage->wkeHandler().paintBitUpdatedCallbackParam = callbackParam;
 }
 
 void CWebView::onAlertBox(wkeAlertBoxCallback callback, void* callbackParam)
@@ -966,7 +1041,22 @@ void CWebView::onPromptBox(wkePromptBoxCallback callback, void* callbackParam)
 
 void defaultRunAlertBox(wkeWebView webView, void* param, const wkeString msg)
 {
-    MessageBoxW(NULL, wkeGetStringW(msg), L"wke", MB_OK);
+    const int maxShowLength = 500;
+    Vector<wchar_t> msgBuf;
+    const wchar_t* msgString = wkeGetStringW(msg);
+    if (wcslen(msgString) > maxShowLength) {
+        msgBuf.resize(maxShowLength);
+        memcpy(msgBuf.data(), msgString, maxShowLength * sizeof(wchar_t));
+        msgBuf[maxShowLength - 1] = L'\0';
+        msgBuf[maxShowLength - 2] = L'.';
+        msgBuf[maxShowLength - 3] = L'.';
+        msgBuf[maxShowLength - 4] = L'.';
+        msgBuf[maxShowLength - 5] = L'.';
+        msgBuf[maxShowLength - 6] = L'.';
+        msgBuf[maxShowLength - 7] = L'.';
+        msgString = msgBuf.data();
+    }
+    MessageBoxW(NULL, msgString, L"wke", MB_OK);
 }
 
 bool defaultRunConfirmBox(wkeWebView webView, void* param, const wkeString msg)
@@ -1123,6 +1213,24 @@ void CWebView::onWillReleaseScriptContext(wkeWillReleaseScriptContextCallback ca
     m_webPage->wkeHandler().willReleaseScriptContextCallbackParam = callbackParam;
 }
 
+void CWebView::onOtherLoad(wkeOnOtherLoadCallback callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().otherLoadCallback = callback;
+    m_webPage->wkeHandler().otherLoadCallbackParam = callbackParam;
+}
+
+void CWebView::onDraggableRegionsChanged(wkeDraggableRegionsChangedCallback callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().draggableRegionsChangedCallback = callback;
+    m_webPage->wkeHandler().draggableRegionsChangedCallbackParam = callbackParam;
+}
+
+void CWebView::onStartDragging(wkeStartDraggingCallback callback, void* callbackParam)
+{
+    m_webPage->wkeHandler().startDraggingCallback = callback;
+    m_webPage->wkeHandler().startDraggingCallbackParam = callbackParam;
+}
+
 void CWebView::setClientHandler(const wkeClientHandler* handler)
 {
     m_webPage->wkeSetClientHandler((void*)handler);
@@ -1183,8 +1291,8 @@ void CWebView::setDragFiles(const POINT* clintPos, const POINT* screenPos, wkeSt
     }
 
     blink::WebViewImpl* webView = m_webPage->webViewImpl();
-    webView->dragTargetDragEnter(webDragData, clientPoint, screenPoint, blink::WebDragOperationMove, 0);
-    webView->dragTargetDragOver(clientPoint, screenPoint, blink::WebDragOperationMove, 0);
+    webView->dragTargetDragEnter(webDragData, clientPoint, screenPoint, blink::WebDragOperationEvery, 0);
+    webView->dragTargetDragOver(clientPoint, screenPoint, blink::WebDragOperationEvery, 0);
     webView->dragTargetDrop(clientPoint, screenPoint, 0);
 }
 
@@ -1193,7 +1301,7 @@ void CWebView::setNetInterface(const char* netInterface)
     m_netInterface = netInterface;
 }
 
-void CWebView::setProxyInfo(const String& host,	unsigned long port,	net::WebURLLoaderManager::ProxyType type, const String& username, const String& password)
+void CWebView::setProxyInfo(const String& host,	unsigned long port,	net::ProxyType type, const String& username, const String& password)
 {
     m_proxyType = type;
 
@@ -1208,6 +1316,62 @@ void CWebView::setProxyInfo(const String& host,	unsigned long port,	net::WebURLL
     }
 }
 
+class ShowDevToolsTaskObserver : public blink::WebThread::TaskObserver {
+public:
+    ShowDevToolsTaskObserver(CWebView* parent, const std::string& url, wkeOnShowDevtoolsCallback callback, void* param)
+    {
+        m_parent = parent;
+        m_url = url;
+        m_callback = callback;
+        m_param = param;
+    }
+    virtual ~ShowDevToolsTaskObserver() {}
+
+    static void handleDevToolsWebViewDestroy(wkeWebView webWindow, void* param)
+    {
+        CWebView* parent = (CWebView*)param;
+        parent->m_isCreatedDevTools = false;
+    }
+
+    virtual void willProcessTask() override
+    {
+        
+    }
+    virtual void didProcessTask() override
+    {
+        OutputDebugStringA("Devtools willProcessTask\n");
+
+        wkeWebView devToolsWebView = wkeCreateWebWindow(WKE_WINDOW_TYPE_POPUP, nullptr, 200, 200, 800, 600);
+        m_parent->m_devToolsWebView = devToolsWebView;
+
+        content::WebPage::connetDevTools(devToolsWebView->webPage(), m_parent->webPage());
+
+        wkeLoadURL(devToolsWebView, m_url.c_str());
+        wkeShowWindow(devToolsWebView, TRUE);
+        wkeOnWindowDestroy(devToolsWebView, handleDevToolsWebViewDestroy, m_parent);
+        wkeSetWindowTitle(devToolsWebView, "Miniblink Devtools");
+        wkeSetZoomFactor(devToolsWebView, m_parent->zoomFactor());
+        blink::Platform::current()->currentThread()->removeTaskObserver(this);
+
+        if (m_callback)
+            m_callback(devToolsWebView, m_param);
+    }
+
+private:
+    CWebView* m_parent;
+    std::string m_url;
+    wkeOnShowDevtoolsCallback m_callback;
+    void* m_param;
+};
+
+void CWebView::showDevTools(const utf8* url, wkeOnShowDevtoolsCallback callback, void* param)
+{
+    if (m_isCreatedDevTools)
+        return;
+    m_isCreatedDevTools = true;
+    blink::Platform::current()->currentThread()->addTaskObserver(new ShowDevToolsTaskObserver(this, url, callback, param));
+}
+
 } // namespace wke
 
 //static Vector<wke::CWebView*> s_webViews;
@@ -1215,6 +1379,8 @@ void CWebView::setProxyInfo(const String& host,	unsigned long port,	net::WebURLL
 wkeWebView wkeCreateWebView()
 {
     wke::CWebView* webView = new wke::CWebView();
+    webView->webPage()->setNeedAutoDrawToHwnd(false);
+
     //s_webViews.append(webView);
     return webView;
 }
@@ -1224,8 +1390,8 @@ void wkeDestroyWebView(wkeWebView webView)
     if (!webView)
         return;
 
-    if (webView->getWkeHandler()->m_windowDestroyCallback)
-        webView->getWkeHandler()->m_windowDestroyCallback(webView, webView->getWkeHandler()->m_windowDestroyCallbackParam);
+    if (webView->getWkeHandler()->windowDestroyCallback)
+        webView->getWkeHandler()->windowDestroyCallback(webView, webView->getWkeHandler()->windowDestroyCallbackParam);
 
     //size_t pos = s_webViews.find(webView);
 

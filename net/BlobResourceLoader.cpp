@@ -35,7 +35,9 @@
 #include "net/AsyncFileStream.h"
 #include "net/FileStream.h"
 #include "net/MemBlobStream.h"
+#include "content/web_impl_win/WebBlobRegistryImpl.h"
 #include "third_party/WebKit/Source/platform/network/HTTPParsers.h"
+#include "third_party/WebKit/Source/platform/weborigin/KURL.h"
 #include "third_party/WebKit/public/platform/WebURLLoaderClient.h"
 #include "third_party/WebKit/public/platform/WebTraceLocation.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
@@ -148,7 +150,7 @@ void BlobResourceSynchronousLoader::didFail(blink::WebURLLoader*, const blink::W
 BlobResourceLoader* BlobResourceLoader::createAsync(BlobDataWrap* blobData, const blink::WebURLRequest& request, blink::WebURLLoaderClient* client, blink::WebURLLoader* loader)
 {
     // FIXME: Should probably call didFail() instead of blocking the load without explanation.
-    if (!equalIgnoringCase(request.httpMethod(), "GET"))
+    if (!equalIgnoringCase((String)request.httpMethod(), "GET"))
         return nullptr;
 
     return /*adoptRef*/(new BlobResourceLoader(blobData, request, client, loader, true));
@@ -157,7 +159,7 @@ BlobResourceLoader* BlobResourceLoader::createAsync(BlobDataWrap* blobData, cons
 void BlobResourceLoader::loadResourceSynchronously(BlobDataWrap* blobData, const blink::WebURLRequest& request, blink::WebURLLoader* loader,
     blink::WebURLError& error, blink::WebURLResponse& response, Vector<char>& data)
 {
-    if (!equalIgnoringCase(request.httpMethod(), "GET")) {
+    if (!equalIgnoringCase((String)request.httpMethod(), "GET")) {
         error.domain = blink::WebString::fromUTF8(webKitBlobResourceDomain);
         error.reason = methodNotAllowed;
         error.unreachableURL = response.url();
@@ -172,6 +174,8 @@ void BlobResourceLoader::loadResourceSynchronously(BlobDataWrap* blobData, const
 
 class StreamWrap {
 public:
+    static const long long kIsAsynSize = -2;
+
     StreamWrap(FileStreamClient* client, bool isAsyn)
     {
         m_blob = nullptr;
@@ -184,12 +188,9 @@ public:
 
     ~StreamWrap()
     {
-        if (m_blob)
-            delete m_blob;
-        if (m_fileAsyn)
-            delete m_fileAsyn;
-        if (m_fileSyn)
-            delete m_fileSyn;
+        m_blob = nullptr;
+        m_fileAsyn = nullptr;
+        m_fileSyn = nullptr;
     }
 
     bool initCheck(const String& path)
@@ -197,12 +198,12 @@ public:
         bool isBlob = path.startsWith("file:///c:/miniblink_blob_download_");
         if (isBlob) {
             if (!m_blob)
-                m_blob = new MemBlobStream(m_client, true);
+                m_blob.reset(new MemBlobStream(m_client, true));
         } else {
             if (m_isAsyn && !m_fileAsyn)
-                m_fileAsyn = new AsyncFileStream(m_client);
+                m_fileAsyn.reset(new AsyncFileStream(m_client));
             if (!m_isAsyn && !m_fileSyn)
-                m_fileSyn = new FileStream();
+                m_fileSyn.reset(new FileStream());
         }
         return isBlob;
     }
@@ -218,7 +219,7 @@ public:
         else if (m_isAsyn)
             m_fileAsyn->getSize(path, expectedModificationTime);
 
-        return 0;
+        return kIsAsynSize;
     }
 
     bool openForRead(const String& path, long long offset, long long length)
@@ -235,11 +236,11 @@ public:
 
     void close()
     {
-        if (m_isBlob)
+        if (m_isBlob && m_blob)
             m_blob->close();
-        else if (!m_isAsyn)
+        else if (!m_isAsyn && m_fileSyn)
             m_fileSyn->close();
-        else if (m_isAsyn)
+        else if (m_isAsyn && m_fileAsyn)
             m_fileAsyn->close();
     }
 
@@ -256,9 +257,9 @@ public:
     }
 
 private:
-    MemBlobStream* m_blob;
-    AsyncFileStream* m_fileAsyn;
-    FileStream* m_fileSyn;
+    std::unique_ptr<MemBlobStream> m_blob;
+    std::unique_ptr<AsyncFileStream> m_fileAsyn;
+    std::unique_ptr<FileStream> m_fileSyn;
     bool m_isBlob;
     bool m_isAsyn;
     FileStreamClient* m_client;
@@ -288,6 +289,7 @@ public:
     static void doNotifyFinishOnMainThread(void* param)
     {
         LoaderWrap* self = (LoaderWrap*)param;
+
         if (self->m_client) {
             self->m_client->asynTaskFinish(self->m_runType);
             self->m_client->doNotifyFinish();
@@ -425,6 +427,15 @@ void BlobResourceLoader::doStart()
     }
 }
 
+static String getPathBySystemURL(const blink::WebURL& fileSystemURL)
+{
+    blink::KURL url = fileSystemURL;
+    String urlString = url.getUTF8String();
+    if (urlString.startsWith("file:///"))
+        urlString.remove(0, 8);
+    return urlString;
+}
+
 void BlobResourceLoader::getSizeForNext()
 {
     ASSERT(isMainThread());
@@ -441,29 +452,62 @@ void BlobResourceLoader::getSizeForNext()
             notifyResponse();
             if (isDestroied)
                 return;
+            m_isDestroied = nullptr;
             m_buffer.resize(bufferSize);
             readAsync();
         }
         return;
     }
 
-    const blink::WebBlobData::Item* item = m_blobData->items().at(m_sizeItemCount);
+    long long size = 0;
+    String filePath;
+    blink::WebBlobData::Item* item = m_blobData->items().at(m_sizeItemCount);
     switch (item->type) {
     case blink::WebBlobData::Item::TypeData:
         didGetSize(item->data.size());
         break;
+    case blink::WebBlobData::Item::TypeFileSystemURL:
+        item->filePath = getPathBySystemURL(item->fileSystemURL); // no break
     case blink::WebBlobData::Item::TypeFile:
         // Files know their sizes, but asking the stream to verify that the file wasn't modified.
-        if (m_async)
-            m_streamWrap->getSize(item->filePath, item->expectedModificationTime);
-        else
-            didGetSize(m_streamWrap->getSize(item->filePath, item->expectedModificationTime));
+        size = m_streamWrap->getSize(item->filePath, item->expectedModificationTime);
+        if (StreamWrap::kIsAsynSize != size) // 有可能是miniblink_blob_download类型的blob文件名
+            didGetSize(size);
         break;
+    case blink::WebBlobData::Item::TypeBlob: {
+        content::WebBlobRegistryImpl* blobReg = (content::WebBlobRegistryImpl*)blink::Platform::current()->blobRegistry();
+        net::BlobDataWrap* blobData = blobReg->getBlobDataFromUUID(item->blobUUID);
+        
+        const Vector<blink::WebBlobData::Item*>& items = blobData->items();
+        for (size_t i = 0; i < items.size(); ++i) {
+            blink::WebBlobData::Item* it = items[i];
+            switch (it->type) {
+            case blink::WebBlobData::Item::TypeData:
+                didGetSize(it->data.size());
+                break;
+            case blink::WebBlobData::Item::TypeFileSystemURL:
+                filePath = getPathBySystemURL(item->fileSystemURL); // no break
+                break;
+            case blink::WebBlobData::Item::TypeFile:
+                size = m_streamWrap->getSize(item->filePath, item->expectedModificationTime);
+                if (StreamWrap::kIsAsynSize != size)
+                    didGetSize(size);
+                break;
+            case blink::WebBlobData::Item::TypeBlob:
+                DebugBreak();
+                break;
+            }
+        }
+
+        break;
+    }
     default:
         ASSERT_NOT_REACHED();
     }
 }
 
+// WebBlobData::Item::length的长度表示需要取多长，如果是-1，表示全部取。并且
+// WebBlobRegistryImpl::setBlobDataLengthByTempPath里会对blob型设置个真实长度
 void BlobResourceLoader::didGetSize(long long size)
 {
     ASSERT(isMainThread());
@@ -474,6 +518,8 @@ void BlobResourceLoader::didGetSize(long long size)
 
     // If the size is -1, it means the file has been moved or changed. Fail now.
     if (size == -1) {
+        OutputDebugStringA("BlobResourceLoader::didGetSize fail\n");
+
         m_errorCode = notFoundError;
         notifyResponse();
         return;
@@ -481,13 +527,10 @@ void BlobResourceLoader::didGetSize(long long size)
 
     // The size passed back is the size of the whole file. If the underlying item is a sliced file, we need to use the slice length.
     const blink::WebBlobData::Item* item = m_blobData->items().at(m_sizeItemCount);
-    size = item->length;
-    if (blink::WebBlobData::Item::TypeData == item->type)
-        size = item->data.size();
-    else if (blink::WebBlobData::Item::TypeFile == item->type) {
-        if (!getFileSize(item->filePath, size))
-            size = 0;
-    }
+    RELEASE_ASSERT(item->length != 0);
+
+    if (-1 != item->length && item->length < size)
+        size = item->length;
 
     // Cache the size.
     m_itemLengthList.append(size);
@@ -553,7 +596,7 @@ int BlobResourceLoader::readSync(char* buf, int length)
         int bytesRead = 0;
         if (item->type == blink::WebBlobData::Item::TypeData)
             bytesRead = readDataSync(*item, buf + offset, remaining);
-        else if (item->type == blink::WebBlobData::Item::TypeFile)
+        else if (item->type == blink::WebBlobData::Item::TypeFile || item->type == blink::WebBlobData::Item::TypeFileSystemURL)
             bytesRead = readFileSync(*item, buf + offset, remaining);
         else
             ASSERT_NOT_REACHED();
@@ -665,7 +708,7 @@ void BlobResourceLoader::readAsync()
     const blink::WebBlobData::Item* item = m_blobData->items().at(m_readItemCount);
     if (item->type == blink::WebBlobData::Item::TypeData)
         readDataAsync(*item);
-    else if (item->type == blink::WebBlobData::Item::TypeFile)
+    else if (item->type == blink::WebBlobData::Item::TypeFile || item->type == blink::WebBlobData::Item::TypeFileSystemURL)
         readFileAsync(*item);
     else
         ASSERT_NOT_REACHED();
@@ -770,6 +813,7 @@ void BlobResourceLoader::failed(int errorCode)
     notifyFail(errorCode);
     if (m_isDestroied)
         return;
+    m_isDestroied = nullptr;
 
     // Close the file if needed.
     if (m_fileOpened) {
@@ -789,8 +833,10 @@ void BlobResourceLoader::notifyResponse()
         m_isDestroied = &isDestroied;
         notifyResponseOnError();
 
-        if (!isDestroied)
+        if (!isDestroied) {
+            m_isDestroied = nullptr;
             notifyFinish();
+        }
     } else
         notifyResponseOnSuccess();
 }
@@ -877,6 +923,9 @@ void BlobResourceLoader::doNotifyFinish()
 {
     if (aborted())
         return;
+
+    m_streamWrap->close();
+    m_fileOpened = false;
 
     if (!m_client)
         return;

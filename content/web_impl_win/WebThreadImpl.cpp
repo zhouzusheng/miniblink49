@@ -107,6 +107,8 @@ WebThreadImpl::~WebThreadImpl()
 
 void WebThreadImpl::shutdown()
 {
+    if (m_isMainThread)
+        stopSharedTimer();
     willExit();
     waitForExit();
 }
@@ -163,7 +165,8 @@ void WebThreadImpl::postTask(const blink::WebTraceLocation& location, blink::Web
 }
 
 void WebThreadImpl::postDelayedTaskImpl(
-    const blink::WebTraceLocation& location, blink::WebThread::Task* task, long long delayMs, double* createTimeOnOtherThread, int priority, unsigned* heapInsertionOrder)
+    const blink::WebTraceLocation& location, blink::WebThread::Task* task, 
+    long long delayMs, double* createTimeOnOtherThread, int priority, unsigned* heapInsertionOrder)
 {
     // delete by self
     WebTimerBase* timer = WebTimerBase::create(this, location, task, priority);
@@ -289,10 +292,19 @@ static std::vector<WebThreadImpl::TaskObserver*>::iterator findObserver(std::vec
     return observers.end();
 }
 
+class EmptyTask : public blink::WebThread::Task {
+public:
+    virtual ~EmptyTask() override {}
+    virtual void run() override {};
+};
+
 void WebThreadImpl::addTaskObserver(TaskObserver* observer)
 {
-    if (m_observers.end() == findObserver(m_observers, observer))
-        m_observers.push_back(observer);
+    if (m_observers.end() != findObserver(m_observers, observer))
+        return;
+
+    m_observers.push_back(observer);
+    postTask(FROM_HERE, new EmptyTask());
 }
 
 void WebThreadImpl::removeTaskObserver(TaskObserver* observer)
@@ -400,7 +412,7 @@ void WebThreadImpl::fireOnExit()
 void WebThreadImpl::schedulerTasks()
 {
     // Do a re-entrancy check.
-    if (m_firingTimers || m_suspendTimerQueue) 
+    if (m_firingTimers /*|| m_suspendTimerQueue*/) 
         return;
     m_firingTimers = true;
 

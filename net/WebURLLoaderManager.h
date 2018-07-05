@@ -31,6 +31,9 @@
 #define CURL_STATICLIB  
 #define HTTP_ONLY 
 
+#include "net/CancelledReason.h"
+#include "net/ProxyType.h"
+
 #include "third_party/libcurl/include/curl/curl.h"
 #include "third_party/WebKit/Source/platform/Timer.h"
 
@@ -51,6 +54,7 @@ namespace net {
 class WebURLLoaderInternal;
 class WebURLLoaderManager;
 struct BlobTempFileInfo;
+struct InitializeHandleInfo;
 
 class AutoLockJob {
 public:
@@ -68,15 +72,8 @@ private:
 
 class WebURLLoaderManager {
 public:
-	class IoTask;
-	class MainTask;
-	enum ProxyType {
-        HTTP = CURLPROXY_HTTP,
-        Socks4 = CURLPROXY_SOCKS4,
-        Socks4A = CURLPROXY_SOCKS4A,
-        Socks5 = CURLPROXY_SOCKS5,
-        Socks5Hostname = CURLPROXY_SOCKS5_HOSTNAME
-    };
+    class IoTask;
+    class MainTask;
     static WebURLLoaderManager* sharedInstance();
     int addAsynchronousJob(WebURLLoaderInternal*);
     void cancel(int jobId);
@@ -88,7 +85,6 @@ public:
 
     CURLSH* getCurlShareHandle() const;
 
-    void setCookieJarFileName(const char* cookieJarFileName);
     const char* getCookieJarFileName() const;
 
     void dispatchSynchronousJob(WebURLLoaderInternal*);
@@ -109,11 +105,14 @@ public:
     void handleDidFail(WebURLLoaderInternal* job, const blink::WebURLError& error);
     void handleDidReceiveResponse(WebURLLoaderInternal* job);
 
+    void continueJob(WebURLLoaderInternal* job);
+    void cancelWithHookRedirect(WebURLLoaderInternal* job);
+
 private:
     WebURLLoaderManager();
     ~WebURLLoaderManager();
 
-    void doCancel(int jobId, WebURLLoaderInternal* job);
+    void doCancel(WebURLLoaderInternal* job, CancelledReason cancelledReason);
     
     void setupPOST(WebURLLoaderInternal*, struct curl_slist**);
     void setupPUT(WebURLLoaderInternal*, struct curl_slist**);
@@ -121,12 +120,9 @@ private:
     bool downloadOnIoThread();
     void removeFromCurlOnIoThread(int jobId);
 
-    int startJobOnMainThread(WebURLLoaderInternal* job);
     void applyAuthenticationToRequest(WebURLLoaderInternal*, blink::WebURLRequest*);
 
     int initializeHandleOnMainThread(WebURLLoaderInternal* job);
-    
-    struct InitializeHandleInfo;
     void initializeHandleOnIoThread(int jobId, InitializeHandleInfo* info);
     InitializeHandleInfo* preInitializeHandleOnMainThread(WebURLLoaderInternal* job);
     void startOnIoThread(int jobId);

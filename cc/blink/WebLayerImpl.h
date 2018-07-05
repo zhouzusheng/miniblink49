@@ -56,6 +56,8 @@ public:
     void setLayerTreeHost(cc::LayerTreeHost* host);
     cc::LayerTreeHost* layerTreeHost() const;
 
+    void gc();
+
     // WebLayerImplClient
     virtual void updataAndPaintContents(blink::WebCanvas* canvas, const blink::IntRect& clip) override;
     virtual WebLayerImplClient::Type type() const override { return m_layerType; }
@@ -244,8 +246,8 @@ protected:
     blink::IntRect m_touchEventHandlerRegions;
     blink::WebScrollBlocksOn m_scrollBlocksOn;
     bool m_isContainerForFixedPositionLayers;
-    cc_blink::WebLayerImpl* m_scrollParent;
-    cc_blink::WebLayerImpl* m_clipParent;
+    //cc_blink::WebLayerImpl* m_scrollParent;
+    //cc_blink::WebLayerImpl* m_clipParent;
     cc_blink::WebLayerImpl* m_maskLayer;
     cc_blink::WebLayerImpl* m_replicaLayer;
     WTF::HashSet<WebLayerImpl*>* m_scrollChildren;

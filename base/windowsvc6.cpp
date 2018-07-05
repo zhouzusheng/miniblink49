@@ -4,6 +4,8 @@
 #include <windows.h>
 #include "sys/timeb.h"
 
+extern "C" void __cdecl free(void *);
+
 void __cdecl operator delete(void* p, unsigned int)
 {
     free(p);

@@ -83,7 +83,7 @@ static String scriptStringIfJavaScriptURL(const KURL& url)
         return String();
 
     // This returns an unescaped string
-    return decodeURLEscapeSequences(url.string().substring(11));
+    return WTF::ensureStringToUTF8String(decodeURLEscapeSequences(url.string().substring(11)));
 }
 
 static void buildResourceRequest(FrameLoadRequest* frameLoadRequest, blink::LocalFrame* parentFrame, const KURL& url, const char* target)
@@ -144,7 +144,7 @@ WebPluginImpl::WebPluginImpl(WebLocalFrame* parentFrame, const blink::WebPluginP
     , m_isJavaScriptPaused(false)
     , m_haveCalledSetWindow(false)
     , m_memoryCanvas(nullptr)
-    , m_webviewClient(nullptr)
+    , m_wkeWebview(nullptr)
 {
 #ifndef NDEBUG
     webPluginImplCount.increment();
@@ -640,10 +640,11 @@ void WebPluginImpl::status(const char* message)
 NPError WebPluginImpl::setValue(NPPVariable variable, void* value)
 {
     //LOG(Plugins, "WebPluginImpl::setValue(%s): ", prettyNameForNPPVariable(variable, value).data());
-
     switch (variable) {
     case NPPVpluginWindowBool:
         m_isWindowed = value;
+        //m_isWindowed = false; // weolar
+
         return NPERR_NO_ERROR;
     case NPPVpluginTransparentBool:
         m_isTransparent = value;
@@ -660,7 +661,6 @@ void WebPluginImpl::invalidateTimerFired(blink::Timer<WebPluginImpl>*)
         invalidateRect(m_invalidRects[i]);
     m_invalidRects.clear();
 }
-
 
 void WebPluginImpl::pushPopupsEnabledState(bool state)
 {
@@ -1038,7 +1038,6 @@ void WebPluginImpl::invalidateWindowlessPluginRect(const IntRect& rect)
 //     dirtyRect.move(renderer.borderLeft() + renderer.paddingLeft(), renderer.borderTop() + renderer.paddingTop());
 //     renderer.repaintRectangle(dirtyRect);
 
-    //m_webviewClient->didInvalidateRect(rect);
     m_pluginContainer->invalidateRect(rect);
 }
 
@@ -1371,8 +1370,7 @@ v8::Local<v8::Object> WebPluginImpl::v8ScriptableObject(v8::Isolate*)
 }
 
 bool WebPluginImpl::getFormValue(WebString&)
-{ 
-    DebugBreak();
+{
     return false;
 }
 

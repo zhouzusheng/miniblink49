@@ -2,177 +2,178 @@
 #include "third_party/WebKit/public/platform/Platform.h"
 
 namespace WTF {
-class Mutex;
+	class Mutex;
 }
 
 namespace blink {
 
-template <typename T> class Timer;
+	template <typename T> class Timer;
 }
 
 namespace cc_blink {
-class WebCompositorSupportImpl;
+	class WebCompositorSupportImpl;
 }
 
 namespace content {
 
-class DOMStorageMapWrap;
-class WebThreadImpl;
-class WebMimeRegistryImpl;
-class WebClipboardImpl;
-class WebFileUtilitiesImpl;
-class WebBlobRegistryImpl;
-class WebCryptoImpl;
+	class DOMStorageMapWrap;
+	class WebThreadImpl;
+	class WebMimeRegistryImpl;
+	class WebClipboardImpl;
+	class WebFileUtilitiesImpl;
+	class WebBlobRegistryImpl;
+	class WebCryptoImpl;
 
-class BlinkPlatformImpl : NON_EXPORTED_BASE(public blink::Platform) {
-public:
-    BlinkPlatformImpl();
-    virtual ~BlinkPlatformImpl();
-    void shutdown();
-    void preShutdown();
+	class BlinkPlatformImpl : NON_EXPORTED_BASE(public blink::Platform) {
+	public:
+		BlinkPlatformImpl();
+		virtual ~BlinkPlatformImpl();
+		void shutdown();
+		void preShutdown();
 
-    static void initialize();
+		static void initialize();
 
-    void setGcTimer(double intervalSec);
-    void setResGcTimer(double intervalSec);
-   
-    virtual void cryptographicallyRandomValues(unsigned char* buffer, size_t length) override;
+		void setGcTimer(double intervalSec);
+		void setResGcTimer(double intervalSec);
 
-    // Threads -------------------------------------------------------
+		virtual void cryptographicallyRandomValues(unsigned char* buffer, size_t length) override;
 
-    // Creates an embedder-defined thread.
-    virtual blink::WebThread* createThread(const char* name) override;
-    void onThreadExit(WebThreadImpl* threadImpl);
+		// Threads -------------------------------------------------------
 
-    // Returns an interface to the current thread. This is owned by the
-    // embedder.
-    virtual blink::WebThread* currentThread() override;
-    static void onCurrentThreadWhenWebThreadImplCreated(blink::WebThread* thread);    
+		// Creates an embedder-defined thread.
+		virtual blink::WebThread* createThread(const char* name) override;
+		void onThreadExit(WebThreadImpl* threadImpl);
 
-    virtual const unsigned char* getTraceCategoryEnabledFlag(const char* categoryName) override;
+		// Returns an interface to the current thread. This is owned by the
+		// embedder.
+		virtual blink::WebThread* currentThread() override;
+		static void onCurrentThreadWhenWebThreadImplCreated(blink::WebThread* thread);
 
-    // System --------------------------------------------------------------
-    virtual blink::WebString defaultLocale() override;
-    virtual double currentTime() override;
-    virtual double monotonicallyIncreasingTime() override;
-    virtual double systemTraceTime() override;
+		virtual const unsigned char* getTraceCategoryEnabledFlag(const char* categoryName) override;
 
-    virtual blink::WebString userAgent() override;
-    void setUserAgent(char* ua);
+		// System --------------------------------------------------------------
+		virtual blink::WebString defaultLocale() override;
+		virtual double currentTime() override;
+		virtual double monotonicallyIncreasingTime() override;
+		virtual double systemTraceTime() override;
 
-    virtual blink::WebData loadResource(const char* name) override;
+		virtual blink::WebString userAgent() override;
+		static const char* getUserAgent();
+		void setUserAgent(const char* ua);
 
-    virtual blink::WebThemeEngine* themeEngine() override;
+		virtual blink::WebData loadResource(const char* name) override;
 
-    virtual blink::WebMimeRegistry* mimeRegistry() override;
+		virtual blink::WebThemeEngine* themeEngine() override;
 
-    virtual blink::WebCompositorSupport* compositorSupport() override;
+		virtual blink::WebMimeRegistry* mimeRegistry() override;
 
-    // Process -------------------------------------------------------------
+		virtual blink::WebCompositorSupport* compositorSupport() override;
 
-    // Returns a unique identifier for a process. This may not necessarily be
-    // the process's process ID.
-    virtual uint32_t getUniqueIdForProcess() override;
+		// Process -------------------------------------------------------------
 
-    // Scrollbar ----------------------------------------------------------
-    virtual blink::WebScrollbarBehavior* scrollbarBehavior() override;
+		// Returns a unique identifier for a process. This may not necessarily be
+		// the process's process ID.
+		virtual uint32_t getUniqueIdForProcess() override;
 
-    // Message Ports -------------------------------------------------------
-    virtual void createMessageChannel(blink::WebMessagePortChannel** channel1, blink::WebMessagePortChannel** channel2) override;
+		// Scrollbar ----------------------------------------------------------
+		virtual blink::WebScrollbarBehavior* scrollbarBehavior() override;
 
-    // Network -------------------------------------------------------------
-    blink::WebURLLoader* createURLLoader() override;
-    virtual blink::WebURLError cancelledError(const blink::WebURL&) const override;
+		// Message Ports -------------------------------------------------------
+		virtual void createMessageChannel(blink::WebMessagePortChannel** channel1, blink::WebMessagePortChannel** channel2) override;
 
-    // DOM Storage --------------------------------------------------
-    virtual blink::WebStorageNamespace* createLocalStorageNamespace() override;
-    blink::WebStorageNamespace* createSessionStorageNamespace();
-    virtual bool portAllowed(const blink::WebURL&) const override;
+		// Network -------------------------------------------------------------
+		blink::WebURLLoader* createURLLoader() override;
+		virtual blink::WebURLError cancelledError(const blink::WebURL&) const override;
 
-    // Resources -----------------------------------------------------------
-    virtual blink::WebString queryLocalizedString(blink::WebLocalizedString::Name) override;
-    virtual blink::WebString queryLocalizedString(blink::WebLocalizedString::Name, const blink::WebString& parameter) override;
-    virtual blink::WebString queryLocalizedString(blink::WebLocalizedString::Name, const blink::WebString& parameter1, const blink::WebString& parameter2) override;
+		// DOM Storage --------------------------------------------------
+		virtual blink::WebStorageNamespace* createLocalStorageNamespace() override;
+		blink::WebStorageNamespace* createSessionStorageNamespace();
+		virtual bool portAllowed(const blink::WebURL&) const override;
 
-    // WaitableEvent------------------------------------------------------ -
-    virtual blink::WebWaitableEvent* createWaitableEvent(blink::WebWaitableEvent::ResetPolicy, blink::WebWaitableEvent::InitialState) override;
-    virtual blink::WebWaitableEvent* waitMultipleEvents(const blink::WebVector<blink::WebWaitableEvent*>& events) override;
+		// Resources -----------------------------------------------------------
+		virtual blink::WebString queryLocalizedString(blink::WebLocalizedString::Name) override;
+		virtual blink::WebString queryLocalizedString(blink::WebLocalizedString::Name, const blink::WebString& parameter) override;
+		virtual blink::WebString queryLocalizedString(blink::WebLocalizedString::Name, const blink::WebString& parameter1, const blink::WebString& parameter2) override;
 
-    // Blob ----------------------------------------------------------------
+		// WaitableEvent------------------------------------------------------ -
+		virtual blink::WebWaitableEvent* createWaitableEvent(blink::WebWaitableEvent::ResetPolicy, blink::WebWaitableEvent::InitialState) override;
+		virtual blink::WebWaitableEvent* waitMultipleEvents(const blink::WebVector<blink::WebWaitableEvent*>& events) override;
 
-    // Must return non-null.
-    virtual blink::WebBlobRegistry* blobRegistry() override;
+		// Blob ----------------------------------------------------------------
 
-    // clipboard -----------------------------------------------------------
-    virtual blink::WebClipboard* clipboard() override;
+		// Must return non-null.
+		virtual blink::WebBlobRegistry* blobRegistry() override;
 
-    // Plugin --------------------------------------------------------------
-    void getPluginList(bool refresh, blink::WebPluginListBuilder* builder) override;
+		// clipboard -----------------------------------------------------------
+		virtual blink::WebClipboard* clipboard() override;
 
-    // fileUtilities -------------------------------------------------------
-    virtual blink::WebFileUtilities* fileUtilities() override;
+		// Plugin --------------------------------------------------------------
+		void getPluginList(bool refresh, blink::WebPluginListBuilder* builder) override;
 
-    // WebCrypto ----------------------------------------------------------
+		// fileUtilities -------------------------------------------------------
+		virtual blink::WebFileUtilities* fileUtilities() override;
 
-    virtual blink::WebCrypto* crypto() override;
+		// WebCrypto ----------------------------------------------------------
 
-    //////////////////////////////////////////////////////////////////////////
-    virtual void registerMemoryDumpProvider(blink::WebMemoryDumpProvider*) override;
-    virtual void unregisterMemoryDumpProvider(blink::WebMemoryDumpProvider*) override;
+		virtual blink::WebCrypto* crypto() override;
 
-    //////////////////////////////////////////////////////////////////////////
-    blink::WebThread* tryGetIoThread() const;
-    blink::WebThread* ioThread();
-    void doGarbageCollected();
+		//////////////////////////////////////////////////////////////////////////
+		virtual void registerMemoryDumpProvider(blink::WebMemoryDumpProvider*) override;
+		virtual void unregisterMemoryDumpProvider(blink::WebMemoryDumpProvider*) override;
 
-    //////////////////////////////////////////////////////////////////////////
-    virtual size_t numberOfProcessors() override;
-    void setNumberOfProcessors(size_t num);
+		//////////////////////////////////////////////////////////////////////////
+		blink::WebThread* tryGetIoThread() const;
+		blink::WebThread* ioThread();
+		void doGarbageCollected();
 
-    //////////////////////////////////////////////////////////////////////////
-    class AutoDisableGC {
-    public:
-        AutoDisableGC();
-        ~AutoDisableGC();
-    };
+		//////////////////////////////////////////////////////////////////////////
+		virtual size_t numberOfProcessors() override;
+		void setNumberOfProcessors(size_t num);
 
-private:
-    void destroyWebInfo();
-    void closeThread();
-    void resourceGarbageCollectedTimer(blink::Timer<BlinkPlatformImpl>*);
-    void garbageCollectedTimer(blink::Timer<BlinkPlatformImpl>*);
-    void perfTimer(blink::Timer<BlinkPlatformImpl>*);
-    bool m_isDisableGC;
+		//////////////////////////////////////////////////////////////////////////
+		class AutoDisableGC {
+		public:
+			AutoDisableGC();
+			~AutoDisableGC();
+		};
 
-    CRITICAL_SECTION* m_lock;
-    static const int m_maxThreadNum = 1000;
-    std::vector<WebThreadImpl*> m_threads;
-    int m_threadNum;
+	private:
+		void destroyWebInfo();
+		void closeThread();
+		void resourceGarbageCollectedTimer(blink::Timer<BlinkPlatformImpl>*);
+		void garbageCollectedTimer(blink::Timer<BlinkPlatformImpl>*);
+		void perfTimer(blink::Timer<BlinkPlatformImpl>*);
+		bool m_isDisableGC;
 
-    blink::Timer<BlinkPlatformImpl>* m_gcTimer;
-    blink::Timer<BlinkPlatformImpl>* m_defaultGcTimer;
-    blink::Timer<BlinkPlatformImpl>* m_perfTimer;
-    blink::Timer<BlinkPlatformImpl>* m_resTimer; // ×ÊÔ´µ¥¶ÀÒ»¸ö¶¨Ê±Æ÷
+		CRITICAL_SECTION* m_lock;
+		static const int m_maxThreadNum = 1000;
+		std::vector<WebThreadImpl*> m_threads;
+		int m_threadNum;
 
-    blink::WebThread* m_ioThread;
+		blink::Timer<BlinkPlatformImpl>* m_gcTimer;
+		blink::Timer<BlinkPlatformImpl>* m_defaultGcTimer;
+		blink::Timer<BlinkPlatformImpl>* m_perfTimer;
+		blink::Timer<BlinkPlatformImpl>* m_resTimer; // ï¿½ï¿½Ô´ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½
 
-    ThreadIdentifier m_mainThreadId;
-    blink::WebThemeEngine* m_webThemeEngine;
-    WebMimeRegistryImpl* m_mimeRegistry;
-    WebClipboardImpl* m_clipboardImpl;
-    WebBlobRegistryImpl* m_blobRegistryImpl;
-    WebFileUtilitiesImpl* m_webFileUtilitiesImpl;
-    WebCryptoImpl* m_webCryptoImpl;
-    cc_blink::WebCompositorSupportImpl* m_webCompositorSupport;
-    blink::WebScrollbarBehavior* m_webScrollbarBehavior;
-    DOMStorageMapWrap* m_localStorageStorageMap;
-    DOMStorageMapWrap* m_sessionStorageStorageMap;
-    int64 m_storageNamespaceIdCount;
-    double m_firstMonotonicallyIncreasingTime;
+		blink::WebThread* m_ioThread;
 
-    WTF::String* m_userAgent;
+		ThreadIdentifier m_mainThreadId;
+		blink::WebThemeEngine* m_webThemeEngine;
+		WebMimeRegistryImpl* m_mimeRegistry;
+		WebClipboardImpl* m_clipboardImpl;
+		WebBlobRegistryImpl* m_blobRegistryImpl;
+		WebFileUtilitiesImpl* m_webFileUtilitiesImpl;
+		WebCryptoImpl* m_webCryptoImpl;
+		cc_blink::WebCompositorSupportImpl* m_webCompositorSupport;
+		blink::WebScrollbarBehavior* m_webScrollbarBehavior;
+		DOMStorageMapWrap* m_localStorageStorageMap;
+		DOMStorageMapWrap* m_sessionStorageStorageMap;
+		int64 m_storageNamespaceIdCount;
+		double m_firstMonotonicallyIncreasingTime;
 
-    size_t m_numberOfProcessors;
-};
+		WTF::String* m_userAgent;
+
+		size_t m_numberOfProcessors;
+	};
 
 } // namespace content

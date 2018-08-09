@@ -25,10 +25,14 @@ electron.isPromise = isPromise;
 const dialog = require('./api/dialog').dialog;
 electron.dialog = dialog;
 
+const net = require('./api/net').net;
+electron.net = net;
+
 electron.shell = require("./../common/api/shell").Shell;
 electron.screen = require("./../common/api/screen").Screen;
 electron.tray = require("./../common/api/screen").Tray;
 electron.clipboard = require("./../common/api/clipboard");
+electron.nativeImage = require("./../common/api/native-image").NativeImage;
 
 function SystemPreferences () {}
 SystemPreferences.prototype.isDarkMode = function() { return false; }
@@ -58,6 +62,21 @@ electron.protocol = require("./api/protocol").protocol;
 // Protocol.prototype.uninterceptProtocol = function(scheme, completion) {}
 
 // electron.protocol = new Protocol();
+////////////////////////////////////////////////////////////////
+
+var TouchBar = function (){};
+TouchBar.TouchBarButton = function() {};
+TouchBar.TouchBarColorPicker = function() {};
+TouchBar.TouchBarGroup = function() {};
+TouchBar.TouchBarLabel = function() {};
+TouchBar.TouchBarPopover = function() {};
+TouchBar.TouchBarScrubber = function() {};
+TouchBar.TouchBarSegmentedControl = function() {};
+TouchBar.TouchBarSlider = function() {};
+TouchBar.TouchBarSpacer = function() {};
+
+electron.TouchBar = TouchBar;
+
 ////////////////////////////////////////////////////////////////
 
 function AutoUpdater() {}

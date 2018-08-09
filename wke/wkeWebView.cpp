@@ -4,9 +4,8 @@
 
 #include "content/browser/WebPage.h"
 
-//cexer: 必须包含在后面，因为其中的 wke.h -> windows.h 会定义 max、min，导致 blink 内部的 max、min 出现错乱。
-#include "wkeWebView.h"
-#include "wkeJsBind.h"
+#include "wke/wkeWebView.h"
+#include "wke/wkeJsBind.h"
 
 #include "content/web_impl_win/BlinkPlatformImpl.h"
 #include "content/web_impl_win/WebCookieJarCurlImpl.h"
@@ -20,6 +19,7 @@
 #include "third_party/WebKit/Source/platform/UserGestureIndicator.h"
 #include "third_party/WebKit/Source/bindings/core/v8/ExceptionState.h"
 #include "third_party/WebKit/Source/wtf/text/WTFStringUtil.h"
+#include "net/ActivatingObjCheck.h"
 
 #undef  PURE
 #define PURE = 0;
@@ -41,6 +41,9 @@ CWebView::CWebView()
     , m_isCokieEnabled(true)
     , m_isCreatedDevTools(false)
 {
+    m_id = net::ActivatingObjCheck::inst()->genId();
+    net::ActivatingObjCheck::inst()->add(m_id);
+
     _initPage();
     _initHandler();
     _initMemoryDC();
@@ -51,6 +54,7 @@ CWebView::CWebView()
 
 CWebView::~CWebView()
 {
+    net::ActivatingObjCheck::inst()->remove(m_id);
     m_webPage->close();
 }
 
@@ -276,7 +280,7 @@ void CWebView::loadHtmlWithBaseUrl(const utf8* html, const utf8* baseUrl)
     if (baseUrl)
         kbaseUrl = blink::KURL(blink::ParsedURLString, baseUrl);
     if (!kbaseUrl.isValid())
-        kbaseUrl = blink::KURL();
+        kbaseUrl = kurl;
 
     m_webPage->loadHTMLString(content::WebPage::kMainFrameId, blink::WebData(html, length), kbaseUrl, kbaseUrl, true);
 }
@@ -909,6 +913,8 @@ static jsValue runJsImpl(blink::WebFrame* mainFrame, String* codeString, bool is
     v8::HandleScope handleScope(blink::toIsolate(localFrame));
     v8::Local<v8::Context> context = mainFrame->mainWorldScriptContext();
     v8::Context::Scope contextScope(context);
+
+    wke::AutoAllowRecordJsExceptionInfo autoAllowRecordJsExceptionInfo;
     v8::Local<v8::Value> result = mainFrame->executeScriptAndReturnValue(code);
     return v8ValueToJsValue(context, result);
 }
@@ -1415,6 +1421,8 @@ void wkeDestroyWebView(wkeWebView webView)
 
     if (webView->getWkeHandler()->windowDestroyCallback)
         webView->getWkeHandler()->windowDestroyCallback(webView, webView->getWkeHandler()->windowDestroyCallbackParam);
+
+    net::ActivatingObjCheck::inst()->remove(webView->getId());
 
     //size_t pos = s_webViews.find(webView);
 

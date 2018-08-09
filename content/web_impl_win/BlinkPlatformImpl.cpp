@@ -35,7 +35,7 @@
 #include "third_party/WebKit/Source/platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "third_party/WebKit/Source/bindings/core/v8/V8GCController.h"
 #include "third_party/skia/include/core/SkGraphics.h"
-#include "net/ActivatingLoaderCheck.h"
+#include "net/ActivatingObjCheck.h"
 #include "gen/blink/core/UserAgentStyleSheets.h"
 #include "gen/blink/platform/RuntimeEnabledFeatures.h"
 #include "third_party/WebKit/Source/core/loader/ImageLoader.h" // TODO
@@ -47,7 +47,7 @@
 #include "gin/public/isolate_holder.h"
 #include "gin/array_buffer.h"
 #include "net/WebURLLoaderManager.h"
-#include "wke/wkeJsBindFreeTempObject.h"
+#include "wke/wkeUtil.h"
 
 DWORD g_paintToMemoryCanvasInUiThreadCount = 0;
 DWORD g_rasterTaskCount = 0;
@@ -144,6 +144,7 @@ static void setRuntimeEnabledFeatures()
     blink::RuntimeEnabledFeatures::setMemoryCacheEnabled(true);
     blink::RuntimeEnabledFeatures::setCspCheckEnabled(true);
     blink::RuntimeEnabledFeatures::setNpapiPluginsEnabled(true);
+    blink::RuntimeEnabledFeatures::setDOMConvenienceAPIEnabled(true);
 }
 
 void BlinkPlatformImpl::initialize()
@@ -310,7 +311,7 @@ void BlinkPlatformImpl::shutdown()
     SkGraphics::PurgeFontCache();
     SkGraphics::Term();
 
-    net::ActivatingLoaderCheck::inst()->shutdown();
+    net::ActivatingObjCheck::inst()->shutdown();
 
     MemoryCache* memoryCache = MemoryCache::create();
     replaceMemoryCacheForTesting(memoryCache);
@@ -351,7 +352,7 @@ void BlinkPlatformImpl::shutdown()
     blink::shutdown();
     closeThread();
 
-    net::ActivatingLoaderCheck::inst()->destroy();
+    net::ActivatingObjCheck::inst()->destroy();
 
 #ifdef _DEBUG
     size_t v8MemSize = g_v8MemSize;

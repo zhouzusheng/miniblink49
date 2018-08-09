@@ -32,10 +32,11 @@ void WebContents::init(v8::Isolate* isolate, v8::Local<v8::Object> target, node:
     builder.SetMethod("isLoading", &WebContents::isLoadingApi);
     builder.SetMethod("isLoadingMainFrame", &WebContents::isLoadingMainFrameApi);
     builder.SetMethod("isWaitingForResponse", &WebContents::isWaitingForResponseApi);
-    builder.SetMethod("_stop", &WebContents::_stopApi);
-    builder.SetMethod("_goBack", &WebContents::_goBackApi);
-    builder.SetMethod("_goForward", &WebContents::_goForwardApi);
-    builder.SetMethod("_goToOffset", &WebContents::_goToOffsetApi);
+    builder.SetMethod("stop", &WebContents::stopApi);
+    builder.SetMethod("goBack", &WebContents::goBackApi);
+    builder.SetMethod("goForward", &WebContents::goForwardApi);
+    builder.SetMethod("goToOffset", &WebContents::goToOffsetApi);
+    builder.SetMethod("goToIndex", &WebContents::goToIndexApi);
     builder.SetMethod("isCrashed", &WebContents::isCrashedApi);
     builder.SetMethod("setUserAgent", &WebContents::setUserAgentApi);
     builder.SetMethod("getUserAgent", &WebContents::getUserAgentApi);
@@ -100,6 +101,7 @@ void WebContents::init(v8::Isolate* isolate, v8::Local<v8::Object> target, node:
 
     gin::Dictionary webContentsClass(isolate, prototype->GetFunction());
     webContentsClass.SetMethod("getFocusedWebContents", &WebContents::getFocusedWebContentsApi);
+    webContentsClass.SetMethod("getAllWebContents", &WebContents::getAllWebContentsApi);
 
     constructor.Reset(isolate, prototype->GetFunction());
     target->Set(v8::String::NewFromUtf8(isolate, "WebContents"), prototype->GetFunction());
@@ -126,6 +128,8 @@ WebContents::WebContents(v8::Isolate* isolate, v8::Local<v8::Object> wrapper) {
     m_id = IdLiveDetect::get()->constructed(this);
     m_view = nullptr;
     int id = m_id;
+    
+
     gin::Wrappable<WebContents>::InitWith(isolate, wrapper);
 
     WebContents* self = this;
@@ -133,6 +137,7 @@ WebContents::WebContents(v8::Isolate* isolate, v8::Local<v8::Object> wrapper) {
         if (!IdLiveDetect::get()->isLive(id))
             return;
 
+        self->m_ua = wkeGetUserAgent(nullptr);
         self->m_view = wkeCreateWebView();
         wkeSetUserKeyValue(self->m_view, "WebContents", self);
     });
@@ -214,6 +219,8 @@ void WebContents::onDidCreateScriptContext(wkeWebView webView, wkeWebFrameHandle
     if (m_nodeBinding || !wkeIsMainFrame(webView, frame) || !m_isNodeIntegration)
         return;
 
+    const utf8* script = "window.Notification = function(){};";
+    wkeRunJsByFrame(webView, frame, script, false);
     BlinkMicrotaskSuppressionHandle handle = nodeBlinkMicrotaskSuppressionEnter((*context)->GetIsolate());
     m_nodeBinding = new NodeBindings(false, ThreadCall::getBlinkLoop());
     node::Environment* env = m_nodeBinding->createEnvironment(*context);
@@ -324,23 +331,33 @@ void WebContents::anyPostMessageToRenderer(const std::string& channel, const bas
     std::string* channelWrap = new std::string(channel);
     base::ListValue* listParamsWrap = listParams.DeepCopy();
 
-    //std::string* strCallstack = catchCallstack(isolate());
-
-    ThreadCall::callBlinkThreadAsync([self, id, channelWrap, listParamsWrap/*, strCallstack*/] {
+    ThreadCall::callBlinkThreadAsync([self, id, channelWrap, listParamsWrap] {
         if (IdLiveDetect::get()->isLive(id)) {
             emitIPCEvent(self, self->m_view, wkeWebFrameGetMainFrame(self->m_view), *channelWrap, *listParamsWrap);
         }
 
         delete channelWrap;
         delete listParamsWrap;
-        //delete strCallstack;
     });
 }
 
 void WebContents::getFocusedWebContentsApi(const v8::FunctionCallbackInfo<v8::Value>& info) {
     v8::Local<v8::Value> result = WindowInterface::getFocusedContents(info.GetIsolate());
     info.GetReturnValue().Set(result);
-    //return result;
+}
+
+void WebContents::getAllWebContentsApi(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    WindowList* lists = WindowList::getInstance();
+
+    v8::Local<v8::Array> results = v8::Array::New(info.GetIsolate(), lists->size());
+    int count = 0;
+    for (WindowList::iterator it = lists->begin(); it != lists->end(); ++it, ++count) {
+        WebContents* content = (*it)->getWebContents();
+
+        v8::Local<v8::Value> result = content->GetWrapper(info.GetIsolate());
+        results->Set(count, result);
+    }
+    info.GetReturnValue().Set(results);
 }
 
 int WebContents::getIdApi() const {
@@ -357,6 +374,15 @@ bool WebContents::equalApi() const {
 
 static std::string* trimUrl(const std::string& url) {
     std::string* str = new std::string(url);
+
+    // file:\c:\ 处理这种字符串
+    if (str->size() > 9 && str->substr(0, 6) == "file:\\" && str->at(7) == ':') {
+        std::string* strTemp = new std::string(str->substr(6));
+        strTemp->insert(0, "file:///");
+        delete str;
+        str = strTemp;
+    }
+
     if (str->size() > 9 && str->substr(0, 7) == "file://") {
         if (str->at(7) != '/')
             str->insert(7, 1, '/');
@@ -406,23 +432,11 @@ void WebContents::_loadURLApi(const std::string& url) {
 }
 
 std::string WebContents::_getURLApi() {
-    std::string url;
-    WebContents* self = this;
-    int id = m_id;
-    ThreadCall::callBlinkThreadSync([self, &url] {
-        url = wkeGetURL(self->m_view);
-    });
-    return url;
+    return m_url;
 }
 
 std::string WebContents::getTitleApi() {
-    std::string title;
-    WebContents* self = this;
-    int id = m_id;
-    ThreadCall::callBlinkThreadSync([self, &title] {
-        title = wkeGetTitle(self->m_view);
-    });
-    return title;
+    return m_title;
 }
 
 bool WebContents::isLoadingApi() {
@@ -445,7 +459,7 @@ bool WebContents::isWaitingForResponseApi() {
     return false;
 }
 
-void WebContents::_stopApi() {
+void WebContents::stopApi() {
     WebContents* self = this;
     int id = m_id;
 
@@ -455,7 +469,7 @@ void WebContents::_stopApi() {
     });
 }
 
-void WebContents::_goBackApi() {
+void WebContents::goBackApi() {
     WebContents* self = this;
     int id = m_id;
 
@@ -465,7 +479,7 @@ void WebContents::_goBackApi() {
     });
 }
 
-void WebContents::_goForwardApi() {
+void WebContents::goForwardApi() {
     WebContents* self = this;
     int id = m_id;
 
@@ -475,9 +489,26 @@ void WebContents::_goForwardApi() {
     });
 }
 
-void WebContents::_goToOffsetApi() {
-    //todo
+void WebContents::goToOffsetApi(int offset) {
+    WebContents* self = this;
+    int id = m_id;
+
+    ThreadCall::callBlinkThreadAsync([self, id, offset] {
+        if (IdLiveDetect::get()->isLive(id))
+            wkeGoToOffset(self->m_view, offset);
+    });
 }
+
+void WebContents::goToIndexApi(int index) {
+    WebContents* self = this;
+    int id = m_id;
+
+    ThreadCall::callBlinkThreadAsync([self, id, index] {
+        if (IdLiveDetect::get()->isLive(id))
+            wkeGoToIndex(self->m_view, index);
+    });
+}
+
 
 bool WebContents::isCrashedApi() {
     return false;
@@ -487,6 +518,7 @@ void WebContents::setUserAgentApi(const std::string userAgent) {
     WebContents* self = this;
     int id = m_id;
     std::string* str = new std::string(userAgent);
+    m_ua = userAgent;
 
     ThreadCall::callBlinkThreadSync([self, str, id] {
         if (IdLiveDetect::get()->isLive(id))
@@ -496,12 +528,19 @@ void WebContents::setUserAgentApi(const std::string userAgent) {
 }
 
 std::string WebContents::getUserAgentApi() {
-    //todo
-    return "";
+    return m_ua;
 }
 
-void WebContents::insertCSSApi() {
-    //todo
+void WebContents::insertCSSApi(const std::string& cssText) {
+    WebContents* self = this;
+    int id = m_id;
+    std::string* str = new std::string(cssText);
+
+    ThreadCall::callBlinkThreadSync([self, str, id] {
+        if (IdLiveDetect::get()->isLive(id))
+            wkeInsertCSSByFrame(self->m_view, wkeWebFrameGetMainFrame(self->m_view), str->c_str());
+        delete str;
+    });
 }
 
 void WebContents::savePageApi() {
@@ -516,12 +555,13 @@ void WebContents::closeDevToolsApi() {
     //todo
 }
 
-void WebContents::isDevToolsOpenedApi() {
-    //todo
+bool WebContents::isDevToolsOpenedApi() {
+    return false;
 }
 
-void WebContents::isDevToolsFocusedApi() {
+bool WebContents::isDevToolsFocusedApi() {
     //todo
+    return true;
 }
 
 void WebContents::enableDeviceEmulationApi() {
@@ -681,6 +721,10 @@ void WebContents::tabTraverseApi() {
 }
 
 bool WebContents::_sendApi(bool isAllFrames, const std::string& channel, const base::ListValue& args) {
+    if (!isAllFrames) {
+        anyPostMessageToRenderer(channel, args);
+        return true;
+    }
     WindowList::iterator winIt = WindowList::getInstance()->begin();
     for (; winIt != WindowList::getInstance()->end(); ++winIt) {
         WindowInterface* windowInterface = *winIt;
@@ -733,12 +777,12 @@ bool WebContents::isPaintingApi() {
     return false;
 }
 
-void WebContents::setFrameRateApi() {
-    //todo
+void WebContents::setFrameRateApi(int frameRate) {
+    m_frameRate = frameRate;
 }
 
-void WebContents::getFrameRateApi() {
-    //todo
+int WebContents::getFrameRateApi() {
+    return m_frameRate;
 }
 
 void WebContents::invalidateApi() {
@@ -760,8 +804,8 @@ v8::Local<v8::Value> WebContents::getOwnerBrowserWindowApi() {
     return v8::Null(isolate());
 }
 
-void WebContents::hasServiceWorkerApi() {
-    //todo
+bool WebContents::hasServiceWorkerApi() {
+    return false;
 }
 
 void WebContents::unregisterServiceWorkerApi() {

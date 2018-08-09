@@ -57,16 +57,20 @@ public:
 
     virtual void run() override
     {
-        WebURLLoaderInternal* job = m_manager->checkJob(m_jobId);
-        if (!job || kNormalCancelled == job->m_cancelledReason) {
+        JobHead* jobHead = m_manager->checkJob(m_jobId);
+        if (!jobHead || JobHead::kLoaderInternal != jobHead->getType())
+            return;
+        WebURLLoaderInternal* job = (WebURLLoaderInternal*)jobHead;
+        if (kNormalCancelled == job->m_cancelledReason) {
             releaseJobWithoutCurl(job, m_jobId);
             return;
         }
         blink::KURL url = job->firstRequest()->url();
         job->m_response.setURL(url);
+        String urlString = url.getUTF8String();
+        job->m_url = fastStrDup(urlString.utf8().data());
 
         if (job->m_response.mimeType().isNull() || job->m_response.mimeType().isEmpty()) {
-            String urlString = url.getUTF8String();
             int urlHostLength = urlString.length();
             for (int i = 0; i < urlHostLength; ++i) {
                 if ('?' != urlString[i])
@@ -78,10 +82,16 @@ public:
             job->m_response.setMIMEType(blink::MIMETypeRegistry::getMIMETypeForPath(urlWithoutQuery));
         }
 
-        job->client()->didReceiveResponse(job->loader(), job->m_response);
+        if (job->firstRequest()->downloadToFile() && job->m_asynWkeNetSetData) {
+            String tempPath = m_manager->handleHeaderForBlobOnMainThread(job, job->m_asynWkeNetSetData->size());
+            job->m_response.setDownloadFilePath(tempPath);
+        }
+        // job->client()->didReceiveResponse(job->loader(), job->m_response);
+        m_manager->handleDidReceiveResponse(job);
+
         if (job->m_asynWkeNetSetData && kNormalCancelled != job->m_cancelledReason) { // 可能在didReceiveResponse里被cancel
-            WebURLLoaderManager::sharedInstance()->didReceiveDataOrDownload(job, static_cast<char*>(job->m_asynWkeNetSetData), job->m_asynWkeNetSetDataLength, 0);
-            WebURLLoaderManager::sharedInstance()->handleDidFinishLoading(job, WTF::currentTime(), 0);
+            m_manager->didReceiveDataOrDownload(job, job->m_asynWkeNetSetData->data(), job->m_asynWkeNetSetData->size(), 0);
+            m_manager->handleDidFinishLoading(job, WTF::currentTime(), 0);
         }
         if (kHookRedirectCancelled != job->m_cancelledReason)
             releaseJobWithoutCurl(job, m_jobId);
@@ -98,7 +108,12 @@ public:
     {
         m_manager = manager;
         m_jobId = jobId;
-        WebURLLoaderInternal* job = m_manager->checkJob(m_jobId);
+        
+        JobHead* jobHead = m_manager->checkJob(m_jobId);
+        if (!jobHead || JobHead::kLoaderInternal != jobHead->getType())
+            return;
+        WebURLLoaderInternal* job = (WebURLLoaderInternal*)jobHead;
+
         job->m_isBlackList = true;
     }
 
@@ -124,8 +139,11 @@ public:
 
     virtual void run() override
     {
-        WebURLLoaderInternal* job = m_manager->checkJob(m_jobId);
-        if (!job || job->isCancelled())
+        JobHead* jobHead = m_manager->checkJob(m_jobId);
+        if (!jobHead || JobHead::kLoaderInternal != jobHead->getType())
+            return;
+        WebURLLoaderInternal* job = (WebURLLoaderInternal*)jobHead;
+        if (job->isCancelled())
             return;
 
         cancel(job, m_jobId);

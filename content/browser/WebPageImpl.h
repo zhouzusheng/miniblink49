@@ -1,6 +1,9 @@
 ﻿#ifndef WebPageImpl_h
 #define WebPageImpl_h
 
+#include "content/browser/WebPageState.h"
+#include "content/ui/PopupMenuWinClient.h"
+
 #include "base/rand_util.h"
 
 #include "third_party/WebKit/public/web/WebViewClient.h"
@@ -12,7 +15,7 @@
 #include "cc/trees/LayerTreeHostClient.h"
 #include "skia/ext/platform_canvas.h"
 
-#include "content/ui/PopupMenuWinClient.h"
+typedef struct HWND__ *HWND;
 
 namespace cc {
 class LayerTreeHost;
@@ -121,6 +124,11 @@ public:
     // PopupMenuWinClient --------------------------------------------------------
     virtual void onPopupMenuCreate(HWND hWnd) override;
     virtual void onPopupMenuHide() override;
+
+    // Dialogs -------------------------------------------------------------
+    virtual void showValidationMessage(const blink::WebRect& anchorInViewport, const blink::WebString& mainText, blink::WebTextDirection mainTextDir, const blink::WebString& supplementalText, blink::WebTextDirection supplementalTextDir) override;
+    virtual void hideValidationMessage() override;
+    virtual void moveValidationMessage(const blink::WebRect& anchorInViewport) override;
     
     void testPaint();
 
@@ -234,6 +242,7 @@ public:
     blink::WebThread::TaskObserver* m_createDevToolsAgentTaskObserver;
 
     ToolTip* m_toolTip;
+    ToolTip* m_validationMessageTip;
 
     blink::IntRect m_winodwRect;
 
@@ -257,12 +266,7 @@ public:
     cc::LayerTreeHost* m_layerTreeHost;
     bool m_painting;
         
-    enum WebPageState {
-        pageUninited,
-        pageInited,
-        pageDestroying,
-        pageDestroyed
-    } m_state;
+    WebPageState m_state;
 
     bool m_LMouseDown;
     bool m_RMouseDown;

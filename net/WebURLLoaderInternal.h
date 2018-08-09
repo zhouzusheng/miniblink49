@@ -69,24 +69,32 @@ class WebURLLoaderManager;
 class FlattenHTTPBodyElementStream;
 struct InitializeHandleInfo;
 
-class WebURLLoaderInternal {
+class JobHead {
+public:
+    enum Type {
+        kLoaderInternal,
+        kGetFaviconTask,
+        kSetCookiesTask,
+    };
+    virtual ~JobHead() {}
+    virtual int getRefCount() const { return m_ref; }
+    virtual void ref() { atomicIncrement(&m_ref); }
+    virtual void deref() { atomicDecrement(&m_ref); }
+    virtual Type getType() { return m_type; }
+    virtual void cancel() {}
+    int m_id;
+    int m_ref;
+    Type m_type;
+};
+
+class WebURLLoaderInternal : public JobHead {
 public:
     WebURLLoaderInternal(WebURLLoaderImplCurl* loader, const WebURLRequest& request, WebURLLoaderClient* client, bool defersLoading, bool shouldContentSniff);
-    ~WebURLLoaderInternal();
-
-    int getRefCount() const { return m_ref; }
-
-    void ref() { atomicIncrement(&m_ref); }
-    void deref() { atomicDecrement(&m_ref); }
+    virtual ~WebURLLoaderInternal() override;
 
     WebURLLoaderClient* client() { return m_client; }
-    WebURLLoaderClient* m_client;
 
-    void setResponseFired(bool responseFired)
-    {
-        m_responseFired = responseFired;
-    }
-
+    void setResponseFired(bool responseFired) { m_responseFired = responseFired; }
     bool responseFired() { return m_responseFired; }
 
     WebURLLoaderImplCurl* loader() { return m_loader; }
@@ -94,8 +102,10 @@ public:
 
     blink::WebURLRequest* firstRequest() { return m_firstRequest; }
 
-    int m_ref;
-    int m_id;
+    bool isCancelled() const { return kNoCancelled != m_cancelledReason; }
+
+public:
+    WebURLLoaderClient* m_client;
     bool m_isSynchronous;
 
     blink::WebURLRequest* m_firstRequest;
@@ -116,16 +126,13 @@ public:
     bool m_shouldContentSniff;
 
     CURL* m_handle;
-    char* m_url;
+    char* m_url; // 设置给curl的地址。和request可能不同，主要是fragment
+    std::string m_effectiveUrl; // curl收到网络包后返回的最后有效地址，如果有重定向redirect，则可能和上面的变量不同
     struct curl_slist* m_customHeaders;
     WebURLResponse m_response;
     OwnPtr<MultipartHandle> m_multipartHandle;
 
     CancelledReason m_cancelledReason;
-    bool isCancelled() const
-    {
-        return kNoCancelled != m_cancelledReason;
-    }
 
     FlattenHTTPBodyElementStream* m_formDataStream;
 
@@ -164,12 +171,9 @@ public:
     bool m_isHoldJobToAsynCommit;
 
 #if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
-    bool m_isHookRequest;
-    void* m_hookBufForEndHook;
-    int m_hookLength;
-
-    void* m_asynWkeNetSetData;
-    int m_asynWkeNetSetDataLength;
+    int m_isHookRequest; // 1表示wke接口设置的，2表示内部指定要缓存，3表示既是内部指定，又被缓存了
+    Vector<char>* m_hookBufForEndHook;
+    Vector<char>* m_asynWkeNetSetData;
     bool m_isWkeNetSetDataBeSetted;
 #endif
 };

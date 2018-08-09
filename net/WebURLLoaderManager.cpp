@@ -129,13 +129,13 @@ void WebURLLoaderManager::shutdown()
     m_isShutdown = true;
 
     m_liveJobsMutex.lock();
-    WTF::HashMap<int, WebURLLoaderInternal*> liveJobs = m_liveJobs;
+    WTF::HashMap<int, JobHead*> liveJobs = m_liveJobs;
     m_liveJobs.clear();
     m_liveJobsMutex.unlock();
 
-    WTF::HashMap<int, WebURLLoaderInternal*>::iterator it = liveJobs.begin();
+    WTF::HashMap<int, JobHead*>::iterator it = liveJobs.begin();
     for (; it != liveJobs.end(); ++it) {
-        WebURLLoaderInternal* job = it->value;
+        JobHead* job = it->value;
 
         while (true) {
             m_liveJobsMutex.lock();
@@ -876,12 +876,28 @@ WebURLLoaderInternal* AutoLockJob::lock()
     if (!m_manager)
         return nullptr;
 
-    WebURLLoaderInternal* job = m_manager->checkJob(m_jobId);
-    if (!job)
+    JobHead* jobHead = m_manager->checkJob(m_jobId);
+    if (!jobHead)
+        return nullptr;
+    if (JobHead::kLoaderInternal != jobHead->getType())
         return nullptr;
 
-    job->ref();
+    jobHead->ref();
+    WebURLLoaderInternal* job = (WebURLLoaderInternal*)jobHead;
     return job;
+}
+
+JobHead* AutoLockJob::lockJobHead()
+{
+    if (!m_manager)
+        return nullptr;
+
+    JobHead* jobHead = m_manager->checkJob(m_jobId);
+    if (!jobHead)
+        return nullptr;
+
+    jobHead->ref();
+    return jobHead;
 }
 
 void AutoLockJob::setNotDerefForDelete()
@@ -893,22 +909,21 @@ AutoLockJob::~AutoLockJob()
 {
     if (m_isNotDerefForDelete || !m_manager)
         return;
-    WebURLLoaderInternal* job = m_manager->checkJob(m_jobId);
+    JobHead* job = m_manager->checkJob(m_jobId);
     if (job)
         job->deref();
 }
 
-WebURLLoaderInternal* WebURLLoaderManager::checkJob(int jobId)
+JobHead* WebURLLoaderManager::checkJob(int jobId)
 {
     WTF::Locker<WTF::Mutex> locker(m_liveJobsMutex);
-
-    WTF::HashMap<int, WebURLLoaderInternal*>::iterator it = m_liveJobs.find(jobId);
+    WTF::HashMap<int, JobHead*>::iterator it = m_liveJobs.find(jobId);
     if (it == m_liveJobs.end())
         return nullptr;
     return it->value;
 }
 
-int WebURLLoaderManager::addLiveJobs(WebURLLoaderInternal* job)
+int WebURLLoaderManager::addLiveJobs(JobHead* job)
 {
     if (m_isShutdown)
         return 0;
@@ -961,7 +976,11 @@ public:
 
     virtual void run() override
     {
-        WebURLLoaderInternal* job = m_manager->checkJob(m_jobId);
+        JobHead* jobHead = m_manager->checkJob(m_jobId);
+        if (JobHead::kLoaderInternal != jobHead->getType())
+            return;
+
+        WebURLLoaderInternal* job = (WebURLLoaderInternal*)jobHead;
         if (!job || job->isCancelled())
             return;
 
@@ -1010,14 +1029,14 @@ int WebURLLoaderManager::addAsynchronousJob(WebURLLoaderInternal* job)
     KURL kurl = job->firstRequest()->url();
     String url = WTF::ensureStringToUTF8String(kurl.string());
 #if 0
-    //if (WTF::kNotFound != url.find("nav_sprite_v") || WTF::kNotFound != url.find("products_sprites")) 
-    {
-        String outString = String::format("addAsynchronousJob : %d, %s\n", m_liveJobs.size(), WTF::ensureStringToUTF8(url, true).data());
-        OutputDebugStringW(outString.charactersWithNullTermination().data());
-    }
+    if (WTF::kNotFound != url.find("electron-ui/file:")) 
+        OutputDebugStringA("");
+    
+    String outString = String::format("addAsynchronousJob : %d, %s\n", m_liveJobs.size(), WTF::ensureStringToUTF8(url, true).data());
+    OutputDebugStringW(outString.charactersWithNullTermination().data());
 #endif
 
-    if (g_isDecodeUrlRequest) {
+    if (g_isDecodeUrlRequest && !kurl.protocolIsData()) {
         url = blink::decodeURLEscapeSequences(url);
         job->firstRequest()->setURL((blink::KURL(blink::ParsedURLString, url)));
     }
@@ -1068,20 +1087,27 @@ void WebURLLoaderManager::cancelWithHookRedirect(WebURLLoaderInternal* job)
     doCancel(job, kHookRedirectCancelled);
 }
 
-void WebURLLoaderManager::doCancel(WebURLLoaderInternal* job, CancelledReason cancelledReason)
+bool WebURLLoaderManager::doCancel(JobHead* jobHeead, CancelledReason cancelledReason)
 {
+    if (JobHead::kLoaderInternal != jobHeead->getType()) {
+        jobHeead->cancel();
+        return true;
+    }
+
+    WebURLLoaderInternal* job = (WebURLLoaderInternal*)jobHeead;
     WTF::Locker<WTF::Mutex> locker(job->m_destroingMutex);
     bool cancelled = job->isCancelled();
 
     RELEASE_ASSERT(kNoCancelled != cancelledReason);
     //RELEASE_ASSERT(!(kHookRedirectCancelled == job->m_cancelledReason && kNormalCancelled == cancelledReason));
 
-    if (!(kHookRedirectCancelled == job->m_cancelledReason && kHookRedirectCancelled != cancelledReason)) {
+    if (!(kHookRedirectCancelled == job->m_cancelledReason && kHookRedirectCancelled != cancelledReason))
         job->m_cancelledReason = cancelledReason;
-    }
 
     if (WebURLLoaderInternal::kDestroying != job->m_state && !cancelled)
         m_thread->postTask(FROM_HERE, WTF::bind(&WebURLLoaderManager::removeFromCurlOnIoThread, this, job->m_id));
+
+    return false;
 }
 
 void WebURLLoaderManager::cancel(int jobId)
@@ -1100,11 +1126,20 @@ void WebURLLoaderManager::cancelAll()
 {
     WTF::Locker<WTF::Mutex> locker(m_liveJobsMutex);
 
-    WTF::HashMap<int, WebURLLoaderInternal*>::iterator it = m_liveJobs.begin();
+    int jobId = -1;
+    WTF::HashSet<int> removedSet;
+    WTF::HashMap<int, JobHead*>::iterator it = m_liveJobs.begin();
     for (; it != m_liveJobs.end(); ++it) {
-        WebURLLoaderInternal* job = it->value;
-        int jobId = it->key;
-        doCancel(job, kNormalCancelled);
+        JobHead* jobHead = it->value;
+        jobId = it->key;
+        if (doCancel(jobHead, kNormalCancelled))
+            removedSet.add(jobId);
+    }
+
+    WTF::HashSet<int>::iterator itor = removedSet.begin();
+    for (; itor != removedSet.end(); ++itor) {
+        jobId = *itor;
+        m_liveJobs.remove(jobId);
     }
 }
 
@@ -1129,13 +1164,9 @@ void WebURLLoaderManager::dispatchSynchronousJob(WebURLLoaderInternal* job)
     WebPage* page = requestExtraData->page;
     if (page->wkeHandler().loadUrlBeginCallback) {
         
-        if (page->wkeHandler().loadUrlBeginCallback(
-            page->wkeWebView(), 
-            page->wkeHandler().loadUrlBeginCallbackParam,
-            urlBuf.data(),
-            job)) {
+        if (page->wkeHandler().loadUrlBeginCallback(page->wkeWebView(), page->wkeHandler().loadUrlBeginCallbackParam, urlBuf.data(), job)) {
             if (job->m_asynWkeNetSetData && kNormalCancelled != job->m_cancelledReason)
-                WebURLLoaderManager::sharedInstance()->didReceiveDataOrDownload(job, static_cast<char*>(job->m_asynWkeNetSetData), job->m_asynWkeNetSetDataLength, 0);
+                WebURLLoaderManager::sharedInstance()->didReceiveDataOrDownload(job, job->m_asynWkeNetSetData->data(), job->m_asynWkeNetSetData->size(), 0);
 
             WebURLLoaderManager::sharedInstance()->handleDidFinishLoading(job, WTF::currentTime(), 0);
             delete job;
@@ -1175,13 +1206,16 @@ void WebURLLoaderManager::dispatchSynchronousJob(WebURLLoaderInternal* job)
         if (job->client() && job->loader())
             handleDidReceiveResponse(job);
 
+        void* hookBuf = job->m_hookBufForEndHook ? job->m_hookBufForEndHook->data() : nullptr;
+        int hookLength = job->m_hookBufForEndHook ? job->m_hookBufForEndHook->size() : 0;
+
         wkeLoadUrlEndCallback loadUrlEndCallback = page->wkeHandler().loadUrlEndCallback;
         void* loadUrlEndCallbackParam = page->wkeHandler().loadUrlEndCallbackParam;
-        if (job->m_isHookRequest && loadUrlEndCallback)
-            loadUrlEndCallback(page->wkeWebView(), loadUrlEndCallbackParam, urlBuf.data(), job, job->m_hookBufForEndHook, job->m_hookLength);
+        if (1 == job->m_isHookRequest && loadUrlEndCallback)
+            loadUrlEndCallback(page->wkeWebView(), loadUrlEndCallbackParam, urlBuf.data(), job, hookBuf, hookLength);
 
         if (job->m_hookBufForEndHook)
-            didReceiveDataOrDownload(job, static_cast<char*>(job->m_hookBufForEndHook), job->m_hookLength, 0);
+            didReceiveDataOrDownload(job, static_cast<char*>(job->m_hookBufForEndHook->data()), hookLength, 0);
         handleDidFinishLoading(job, 0, 0);
     }
 
@@ -1197,8 +1231,6 @@ void WebURLLoaderManager::dispatchSynchronousJobOnIoThread(WebURLLoaderInternal*
 
     *isCallFinish = true;
 }
-
-//  dispatchPostBodyToWke(job, &result->flattenElements);
 
 #if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
 static bool dispatchWkeLoadUrlBegin(WebURLLoaderInternal* job, InitializeHandleInfo* info)
@@ -1354,7 +1386,7 @@ void WebURLLoaderManager::initializeHandleOnIoThread(int jobId, InitializeHandle
 #endif
     curl_easy_setopt(job->m_handle, CURLOPT_TIMEOUT, 30000);
     curl_easy_setopt(job->m_handle, CURLOPT_SSL_VERIFYPEER, false); // ignoreSSLErrors
-    curl_easy_setopt(job->m_handle, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(job->m_handle, CURLOPT_SSL_VERIFYHOST, FALSE);
     curl_easy_setopt(job->m_handle, CURLOPT_PRIVATE, jobId);
     curl_easy_setopt(job->m_handle, CURLOPT_ERRORBUFFER, m_curlErrorBuffer);
     curl_easy_setopt(job->m_handle, CURLOPT_WRITEFUNCTION, writeCallbackOnIoThread);
@@ -1520,9 +1552,7 @@ DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, webURLLoaderInternalCounter
 #endif
 
 WebURLLoaderInternal::WebURLLoaderInternal(WebURLLoaderImplCurl* loader, const WebURLRequest& request, WebURLLoaderClient* client, bool defersLoading, bool shouldContentSniff)
-    : m_ref(0)
-    , m_id(0)
-    , m_isSynchronous(false)
+    : m_isSynchronous(false)
     , m_client(client)
     , m_lastHTTPMethod(request.httpMethod())
     , status(0)
@@ -1539,14 +1569,15 @@ WebURLLoaderInternal::WebURLLoaderInternal(WebURLLoaderImplCurl* loader, const W
     , m_state(kNormal)
 #if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
     , m_hookBufForEndHook(nullptr)
-    , m_hookLength(0)
     , m_isHookRequest(false)
     , m_asynWkeNetSetData(nullptr)
-    , m_asynWkeNetSetDataLength(0)
     , m_isWkeNetSetDataBeSetted(false)
 #endif
     , m_bodyStreamWriter(nullptr)
 {
+    m_ref = 0;
+    m_id = 0;
+    m_type = kLoaderInternal;
     m_firstRequest = new blink::WebURLRequest(request);
     KURL url = (KURL)m_firstRequest->url();
     m_user = url.user();
@@ -1577,11 +1608,11 @@ WebURLLoaderInternal::~WebURLLoaderInternal()
 
 #if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
     if (m_hookBufForEndHook)
-        free(m_hookBufForEndHook);
+        delete m_hookBufForEndHook;
 
     if (m_asynWkeNetSetData) {
         RELEASE_ASSERT(!m_customHeaders);
-        free(m_asynWkeNetSetData);
+        delete m_asynWkeNetSetData;
     }
 #endif
 

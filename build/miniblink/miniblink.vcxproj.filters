@@ -793,6 +793,9 @@
     <Filter Include="cef\libcef\renderer">
       <UniqueIdentifier>{0ab055c5-d093-4e58-9ccc-4386731abe93}</UniqueIdentifier>
     </Filter>
+    <Filter Include="third_party\Webkit\Source\modules\filesystem">
+      <UniqueIdentifier>{f0fcc5a6-ff03-4fb3-8538-e9e69fdfc2c7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\third_party\WebKit\Source\bindings\core\v8\ActiveDOMCallback.cpp">

@@ -1142,5 +1142,8 @@
     <ClCompile Include="..\..\v8_5_7\src\heap\array-buffer-tracker.cc">
       <Filter>src\heap</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\v8_5_7\src\api.cc">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

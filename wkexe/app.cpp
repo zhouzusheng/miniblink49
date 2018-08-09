@@ -145,13 +145,7 @@ wkeWebView HandleCreateView(wkeWebView webWindow, void* param, wkeNavigationType
 }
 bool HandleLoadUrlBegin(wkeWebView webView, void* param, const char *url, void *job)
 {
-	if (strcmp(url, "http://hook.test/") == 0) {
-		wkeNetSetMIMEType(job, "text/html");
-		wkeNetSetURL(job, url);
-		wkeNetSetData(job, "<li>这是个hook页面</li><a herf=\"http://www.baidu.com/\">HookRequest</a>", sizeof("<li>这是个hook页面</li><a herf=\"http://www.baidu.com/\">HookRequest</a>"));
-		return true;
-	}
-	else if (strcmp(url, "http://www.baidu.com/") == 0) {
+	if (strcmp(url, "http://www.baidu.com/") == 0) {
 		wkeNetHookRequest(job);
 	}
 	return false;

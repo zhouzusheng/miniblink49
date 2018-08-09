@@ -401,6 +401,7 @@
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release_vc6|Win32'">true</WholeProgramOptimization>
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</WholeProgramOptimization>
     </ClCompile>
+    <ClCompile Include="..\..\v8_5_7\src\api.cc" />
     <ClCompile Include="..\..\v8_5_7\src\asmjs\asm-js.cc">
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</WholeProgramOptimization>
     </ClCompile>

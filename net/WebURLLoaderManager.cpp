@@ -81,7 +81,10 @@
 
 #if (defined ENABLE_WKE) && (ENABLE_WKE == 1)
 #include "wke/wkeWebView.h"
-extern bool g_isDecodeUrlRequest;
+namespace wke {
+	extern bool g_isDecodeUrlRequest;
+}
+using wke::g_isDecodeUrlRequest;
 #endif
 #include "wtf/RefCountedLeakCounter.h"
 

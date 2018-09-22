@@ -14,6 +14,7 @@
 #include "cc/trees/LayerTreeHost.h"
 #include "cc/trees/LayerTreeHostClient.h"
 #include "skia/ext/platform_canvas.h"
+#include "net/PageNetExtraData.h"
 
 typedef struct HWND__ *HWND;
 
@@ -35,6 +36,10 @@ class WebViewImpl;
 #if (defined ENABLE_CEF) && (ENABLE_CEF == 1)
 class CefBrowserHostImpl;
 #endif
+
+namespace net {
+class PageNetExtraData;
+}
 
 namespace content {
 
@@ -98,6 +103,7 @@ public:
     virtual void setMouseOverURL(const blink::WebURL&) override;
     virtual void setToolTipText(const blink::WebString&, blink::WebTextDirection hint) override;
     virtual void draggableRegionsChanged() override;
+    virtual void onMouseDown(const blink::WebNode& mouseDownNode) override;
 
     // Editing --------------------------------------------------------
     virtual bool handleCurrentKeyboardEvent() override;
@@ -134,7 +140,7 @@ public:
 
     void beginMainFrame();
     
-    void repaintRequested(const blink::IntRect& windowRect);
+    void repaintRequested(const blink::IntRect& windowRect, bool forceRepaintIfEmptyRect);
 
     void freeV8TempObejctOnOneFrameBefore();
 
@@ -236,6 +242,9 @@ public:
     void onDraggingSimulate();
     bool m_isDragging;
     bool m_isFirstEnterDrag;
+
+    void setCookieJarPath(const char* path);
+    RefPtr<net::PageNetExtraData> m_pageNetExtraData;
 
     static int64_t m_firstFrameId;
 

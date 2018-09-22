@@ -142,6 +142,8 @@ WebPageImpl::WebPageImpl()
     m_devToolsClient = nullptr;
     m_devToolsAgent = nullptr;
     m_isEnterDebugLoop = false;
+    m_draggableRegion = ::CreateRectRgn(0, 0, 0, 0); // Create a HRGN representing the draggable window area.
+    m_pageNetExtraData = nullptr;
 
     WebPageImpl* self = this;
     m_dragHandle = new DragHandle(
@@ -580,10 +582,15 @@ void WebPageImpl::doClose()
 #endif
 
 
-    if (m_hWnd)
-        ::RevokeDragDrop(m_hWnd);
+    if (m_hWnd) {
+        if (::IsWindow(m_hWnd)) {
+            ::RevokeDragDrop(m_hWnd);
+            ASSERT(0 == m_dragHandle->getRefCount());
+        } else {
+            ASSERT(1 == m_dragHandle->getRefCount());
+        }
+    }
 
-    ASSERT(0 == m_dragHandle->getRefCount());
     delete m_dragHandle;
     m_dragHandle = nullptr;
 
@@ -1120,14 +1127,18 @@ void WebPageImpl::setDrawMinInterval(double drawMinInterval)
         m_layerTreeHost->setDrawMinInterval(drawMinInterval);
 }
 
-void WebPageImpl::repaintRequested(const IntRect& windowRect)
+void WebPageImpl::repaintRequested(const IntRect& windowRect, bool forceRepaintIfEmptyRect)
 {
     freeV8TempObejctOnOneFrameBefore();
-    if (pageInited != m_state || windowRect.isEmpty() || windowRect.maxY() < 0 || windowRect.maxX() < 0)
+    IntRect r = windowRect;
+    if (forceRepaintIfEmptyRect && r.isEmpty())
+        r = m_layerTreeHost->getClientRect();
+
+    if (pageInited != m_state || r.isEmpty() || r.maxY() < 0 || r.maxX() < 0)
         return;
 
     if (m_layerTreeHost)
-        m_layerTreeHost->postPaintMessage(windowRect);
+        m_layerTreeHost->postPaintMessage(r);
     setNeedsCommitAndNotLayout();
 }
 
@@ -1137,7 +1148,7 @@ void WebPageImpl::didInvalidateRect(const WebRect& r)
     IntRect windowRect(r);
     if (-1 == windowRect.width() || -1 == windowRect.height())
         windowRect = m_layerTreeHost->getClientRect();
-    repaintRequested(windowRect);
+    repaintRequested(windowRect, false);
 }
 
 // Called when the Widget has changed size as a result of an auto-resize.
@@ -1843,7 +1854,14 @@ WebStorageNamespace* WebPageImpl::createSessionStorageNamespace()
 
 WebString WebPageImpl::acceptLanguages()
 {
-    return WebString::fromUTF8("zh-CN,zh");
+    if (m_webViewImpl) {
+        blink::Page *page = m_webViewImpl->page();
+        if (page) {
+            blink::Settings &setings = page->settings();
+            return setings.language();
+        }
+    }
+    return WebString::fromUTF8("zh-CN,cn");
 }
 
 void WebPageImpl::setScreenInfo(const WebScreenInfo& info)
@@ -1886,6 +1904,12 @@ void WebPageImpl::setMouseOverURL(const blink::WebURL& url)
 void WebPageImpl::setToolTipText(const blink::WebString& toolTip, blink::WebTextDirection hint)
 {
     m_toolTip->show(WTF::ensureUTF16UChar((String)toolTip, true).data(), nullptr);
+}
+
+void WebPageImpl::onMouseDown(const blink::WebNode& mouseDownNode)
+{
+    if (mouseDownNode.isDraggable())
+        m_platformEventHandler->setIsDraggableNodeMousedown();
 }
 
 void WebPageImpl::draggableRegionsChanged()
@@ -1998,6 +2022,13 @@ void WebPageImpl::didExitDebugLoop()
 
     if (m_devToolsClient)
         m_webViewImpl->setIgnoreInputEvents(true);
+}
+
+void WebPageImpl::setCookieJarPath(const char* path)
+{
+    if (!m_pageNetExtraData)
+        m_pageNetExtraData = new net::PageNetExtraData();
+    m_pageNetExtraData->setCookieJarPath(path);
 }
 
 bool WebPageImpl::initSetting()

@@ -793,9 +793,6 @@
     <Filter Include="cef\libcef\renderer">
       <UniqueIdentifier>{0ab055c5-d093-4e58-9ccc-4386731abe93}</UniqueIdentifier>
     </Filter>
-    <Filter Include="third_party\Webkit\Source\modules\filesystem">
-      <UniqueIdentifier>{f0fcc5a6-ff03-4fb3-8538-e9e69fdfc2c7}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\third_party\WebKit\Source\bindings\core\v8\ActiveDOMCallback.cpp">
@@ -10136,6 +10133,15 @@
     </ClCompile>
     <ClCompile Include="..\..\wke\wkeGlobalVar.cpp">
       <Filter>wke</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\net\PageNetExtraData.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\WebKit\Source\platform\fonts\shaping\HarfBuzzFace.cpp">
+      <Filter>third_party\Webkit\Source\platform\fonts\shaping</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third_party\WebKit\Source\platform\fonts\shaping\HarfBuzzShaper.cpp">
+      <Filter>third_party\Webkit\Source\platform\fonts\shaping</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -20927,9 +20933,6 @@
     <ClInclude Include="..\..\wke\wkeJsBind.h">
       <Filter>wke</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\wke\wkeJsBindFreeTempObject.h">
-      <Filter>wke</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\third_party\WebKit\Source\web\WebMediaPlayerClientImpl.h">
       <Filter>third_party\Webkit\Source\web</Filter>
     </ClInclude>
@@ -23029,6 +23032,12 @@
       <Filter>wke</Filter>
     </ClInclude>
     <ClInclude Include="..\..\wke\wkeGlobalVar.h">
+      <Filter>wke</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\net\PageNetExtraData.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\wke\wkeMediaPlayer.h">
       <Filter>wke</Filter>
     </ClInclude>
   </ItemGroup>

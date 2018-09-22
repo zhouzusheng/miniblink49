@@ -54,6 +54,7 @@ struct SetupHttpMethodInfo {
     }
     SetupPutInfo* put;
     SetupPostInfo* post;
+    //SetupDeleteInfo* del;
 };
 
 }

@@ -207,10 +207,10 @@ void WebPage::fireResizeEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
         m_pageImpl->fireResizeEvent(hWnd, message, wParam, lParam);
 }
 
-void WebPage::repaintRequested(const IntRect& windowRect)
+void WebPage::repaintRequested(const IntRect& windowRect, bool forceRepaintIfEmptyRect)
 {
     if (m_pageImpl)
-        m_pageImpl->repaintRequested(windowRect); 
+        m_pageImpl->repaintRequested(windowRect, forceRepaintIfEmptyRect);
 }
 
 void WebPage::firePaintEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -243,7 +243,7 @@ void WebPage::fireKillFocusEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
 LRESULT WebPage::fireMouseEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, BOOL* bHandle)
 {
     if (bHandle)
-        bHandle = FALSE;
+        *bHandle = FALSE;
     if (m_pageImpl)
         return m_pageImpl->fireMouseEvent(hWnd, message, wParam, lParam, bHandle);
     return 0;
@@ -485,6 +485,19 @@ blink::WebScreenInfo WebPage::screenInfo()
     return blink::WebScreenInfo();
 }
 
+PassRefPtr<net::PageNetExtraData> WebPage::getPageNetExtraData()
+{
+    if (m_pageImpl)
+        return m_pageImpl->m_pageNetExtraData;
+    return nullptr;
+}
+
+void WebPage::setCookieJarPath(const char* path)
+{
+    if (m_pageImpl)
+        return m_pageImpl->setCookieJarPath(path);
+}
+
 WebPage* WebPage::getSelfForCurrentContext()
 {
     WebPageImpl* impl = WebPageImpl::getSelfForCurrentContext();
@@ -499,6 +512,11 @@ WebViewImpl* WebPage::webViewImpl()
     if (m_pageImpl)
         return m_pageImpl->m_webViewImpl;
     return nullptr;
+}
+
+WebPageImpl* WebPage::webPageImpl()
+{
+    return m_pageImpl;
 }
 
 WebFrame* WebPage::mainFrame()

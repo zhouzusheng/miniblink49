@@ -24,6 +24,8 @@
 #include "third_party/WebKit/public/platform/WebDragData.h"
 #include "third_party/WebKit/Source/web/WebViewImpl.h"
 #include "third_party/WebKit/Source/web/WebSettingsImpl.h"
+#include "third_party/WebKit/Source/core/frame/Settings.h"
+#include "third_party/WebKit/Source/core/page/Page.h"
 #include "gen/blink/platform/RuntimeEnabledFeatures.h"
 #include "wtf/text/WTFString.h"
 #include "wtf/text/WTFStringUtil.h"
@@ -258,6 +260,11 @@ void wkeSetDebugConfig(wkeWebView webview, const char* debugString, const char* 
             wke::g_rendererAntiAlias = atoi(param) == 1;
         }
     }
+}
+
+void wkeSetLanguage(wkeWebView webview, const char* language)
+{
+    webview->webPage()->webViewImpl()->page()->settings().setLanguage(String(language));
 }
 
 void wkeUpdate()
@@ -1572,6 +1579,11 @@ bool wkeRegisterEmbedderCustomElement(wkeWebView webView, wkeWebFrameHandle fram
     return true;
 }
 
+void wkeSetMediaPlayerFactory(wkeWebView webView, wkeMediaPlayerFactory factory)
+{
+    wke::g_wkeMediaPlayerFactory = factory;
+}
+
 const utf8* wkeUtilDecodeURLEscape(const utf8* url)
 {
     String result = blink::decodeURLEscapeSequences(url);
@@ -1839,10 +1851,19 @@ namespace wke {
 
 bool checkThreadCallIsValid(const char* funcName)
 {
+    String output;
+    if (!wke::wkeIsInit) {
+        output = L"禁止初始化前调用此接口：";
+        output.append(funcName);
+        ::MessageBoxW(nullptr, output.charactersWithNullTermination().data(), L"警告！", MB_OK);
+        ::TerminateProcess((HANDLE)-1, 5);
+        return false;
+    }
+
     if (WTF::isMainThread())
         return true;
         
-    String output = L"禁止多线程调用此接口：";
+    output = L"禁止多线程调用此接口：";
     output.append(funcName);
     output.append(L"。当前线程id：");
     output.append(String::number(::GetCurrentThreadId()));

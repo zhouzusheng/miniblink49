@@ -47,6 +47,8 @@ namespace blink {
 class WebURLRequest;
 class WebURLResponse;
 struct WebURLError;
+class WebURLLoaderClient;
+class WebURLLoader;
 }
 
 namespace net {
@@ -56,6 +58,7 @@ class WebURLLoaderInternal;
 class WebURLLoaderManager;
 struct BlobTempFileInfo;
 struct InitializeHandleInfo;
+struct MainTaskArgs;
 
 class AutoLockJob {
 public:
@@ -87,7 +90,7 @@ public:
 
     CURLSH* getCurlShareHandle() const;
 
-    const char* getCookieJarFileName() const;
+    //const char* getCookieJarFileName() const;
 
     void dispatchSynchronousJob(WebURLLoaderInternal*);
 
@@ -100,8 +103,11 @@ public:
 
     bool isShutdown() const { return m_isShutdown; }
 
+    void appendDataToBlobCacheWhenDidDownloadData(blink::WebURLLoaderClient* client, blink::WebURLLoader* loader, const String& url, const char* data, int dataLength, int encodedDataLength);
+    String createBlobTempFileInfoByUrlIfNeeded(const String& url);
     String handleHeaderForBlobOnMainThread(WebURLLoaderInternal* job, size_t totalSize);
     BlobTempFileInfo* getBlobTempFileInfoByTempFilePath(const String& path);
+    
     void didReceiveDataOrDownload(WebURLLoaderInternal* job, const char* data, int dataLength, int encodedDataLength);
     void handleDidFinishLoading(WebURLLoaderInternal* job, double finishTime, int64_t totalEncodedDataLength);
     void handleDidFail(WebURLLoaderInternal* job, const blink::WebURLError& error);
@@ -139,7 +145,7 @@ private:
     Vector<WebURLLoaderInternal*> m_resourceHandleList;
     CURLM* m_curlMultiHandle;
     CURLSH* m_curlShareHandle;
-    char* m_cookieJarFileName;
+    //char* m_cookieJarFileName;
     char m_curlErrorBuffer[CURL_ERROR_SIZE];
     const CString m_certificatePath;
     int m_runningJobs;
@@ -152,6 +158,8 @@ private:
     WTF::Mutex m_liveJobsMutex;
     WTF::HashMap<int, JobHead*> m_liveJobs;
     int m_newestJobId;
+
+    //WTF::HashMap<int, MainTaskArgs*> m_writeCallbackCache;
     
     WTF::HashMap<String, BlobTempFileInfo*> m_blobCache; // real url -> <temp, data>
 };

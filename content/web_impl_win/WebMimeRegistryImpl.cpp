@@ -1,6 +1,7 @@
 #include "config.h"
 #include "WebMimeRegistryImpl.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "wke/wkeGlobalVar.h"
 #include <wtf/text/StringHash.h>
 #include <wtf/text/WTFStringUtil.h>
 #include <wtf/HashMap.h>
@@ -155,8 +156,17 @@ blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsJavaScriptMIME
 }
 
 blink::WebMimeRegistry::SupportsType WebMimeRegistryImpl::supportsMediaMIMEType(
-    const blink::WebString&, const blink::WebString&, const blink::WebString&)
+    const blink::WebString& type, const blink::WebString& typeCodecs, const blink::WebString& system)
 {
+    String typeString = type;
+    if (wke::g_onIsMediaPlayerSupportsMIMETypeCallback) {
+
+        std::string typeStr = type.utf8();
+        bool isSupported = wke::g_onIsMediaPlayerSupportsMIMETypeCallback(typeStr.c_str());
+        if (isSupported) // if (WTF::kNotFound != typeString.find("video/mp4"))
+            return blink::WebMimeRegistry::IsSupported;
+    }
+
     return blink::WebMimeRegistry::IsNotSupported;
 }
 
@@ -220,6 +230,7 @@ void WebMimeRegistryImpl::ensureMimeTypeMap()
     m_mimetypeMap->add("htm", "text/html");
     m_mimetypeMap->add("xml", "text/xml");
     m_mimetypeMap->add("xsl", "text/xsl");
+    m_mimetypeMap->add("xls", "application/xls+vnd.ms-excel");
     m_mimetypeMap->add("js", "application/x-javascript");
     m_mimetypeMap->add("xhtml", "application/xhtml+xml");
     m_mimetypeMap->add("rss", "application/rss+xml");
@@ -243,6 +254,14 @@ void WebMimeRegistryImpl::ensureMimeTypeMap()
     m_mimetypeMap->add("webm", "video/webm");
     m_mimetypeMap->add("mht", "multipart/related");
     m_mimetypeMap->add("mhtml", "multipart/related");
+
+    m_mimetypeMap->add("hex", "application/hex");
+    m_mimetypeMap->add("rbf", "application/rbf");
+    m_mimetypeMap->add("bin", "application/bin");
+    m_mimetypeMap->add("zip", "application/zip");
+    m_mimetypeMap->add("rar", "application/rar");
+    m_mimetypeMap->add("doc", "application/doc");
+    m_mimetypeMap->add("docx", "application/docx");
 }
 
 blink::WebString WebMimeRegistryImpl::mimeTypeForExtension(const blink::WebString& ext)
@@ -308,7 +327,13 @@ static bool match(const char* pattern, const char* content)
 
 static bool wildcardMatch(const WTF::String& pattern, const WTF::String& content)
 {
-    return match(pattern.utf8().data(), content.utf8().data());
+    CString patternStr = pattern.utf8();
+    CString contentStr = content.utf8();
+    bool result = match(patternStr.data(), contentStr.data());
+    if (!result)
+        result = (WTF::kNotFound != content.find(pattern));
+    
+    return result;
 }
 
 Vector<blink::WebString> WebMimeRegistryImpl::extensionsForMimeType(const blink::WebString& mime)

@@ -4,6 +4,9 @@
     <Filter Include="src">
       <UniqueIdentifier>{3a4ce0f4-5050-42c1-bf6e-2a9c54180474}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\minzip">
+      <UniqueIdentifier>{2ef8cc89-1811-46aa-bd26-96d365d6193e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
@@ -65,16 +68,10 @@
     <ClCompile Include="..\..\third_party\zlib\compress.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\third_party\zlib\crc_folding.c">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\third_party\zlib\crc32.c">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\third_party\zlib\deflate.c">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\third_party\zlib\fill_window_sse.c">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\third_party\zlib\gzclose.c">
@@ -101,13 +98,7 @@
     <ClCompile Include="..\..\third_party\zlib\inftrees.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\third_party\zlib\simd_stub.c">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\third_party\zlib\trees.c">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\third_party\zlib\unzip.c">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

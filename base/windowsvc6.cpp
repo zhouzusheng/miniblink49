@@ -237,7 +237,7 @@ char WINAPI InterlockedExchangeAdd8(char volatile * _Addend, char _Value)
 
 };
 
-void __stdcall _ReadWriteBarrier(void)
+void /*__stdcall*/ _ReadWriteBarrier(void)
 {
 }
 

@@ -15,6 +15,8 @@ class WebLocalFrame;
 struct WebPoint;
 }
 
+typedef struct _wkeWebDragData wkeWebDragData;
+
 namespace content {
 
 class DragHandle : public IDropTarget {
@@ -24,6 +26,7 @@ public:
         std::function<void(void)>&& notifOnLeaveDrag,
         std::function<void(void)>&& notifOnDragging
         );
+    ~DragHandle() {}
 
     void setViewWindow(HWND viewWindow, blink::WebViewImpl* webViewImpl);
 
@@ -39,13 +42,13 @@ public:
     static blink::WebDragOperation dragCursorTodragOperation(DWORD op);
 
     void startDragging(blink::WebLocalFrame* frame,
-        const blink::WebDragData& data,
+        const wkeWebDragData* data,
         const blink::WebDragOperationsMask mask,
         const blink::WebImage& image,
         const blink::WebPoint& dragImageOffset);
 
     blink::WebDragOperation startDraggingInUiThread(blink::WebLocalFrame* frame,
-        const blink::WebDragData* data,
+        const wkeWebDragData* data,
         const blink::WebDragOperationsMask mask,
         const blink::WebImage* image,
         const blink::WebPoint* dragImageOffset);

@@ -61,6 +61,7 @@ WebPage::WebPage(void* foreignPtr)
     m_wkeHandler = new wke::CWebViewHandler();
     memset(m_wkeHandler, 0, sizeof(wke::CWebViewHandler));
 #endif
+    m_isContextMenuEnable = true;
 }
 
 WebPage::~WebPage()
@@ -77,9 +78,9 @@ WebPage::~WebPage()
     m_webPageSet->remove(this);
 }
 
-bool WebPage::init(HWND hWnd)
+bool WebPage::init(HWND hWnd, COLORREF color)
 {
-    m_pageImpl = new WebPageImpl();
+    m_pageImpl = new WebPageImpl(color);
     m_pageImpl->init(this, hWnd);
     
     return true;
@@ -174,6 +175,16 @@ void WebPage::enablePaint()
 {
     if (m_pageImpl)
         m_pageImpl->enablePaint();
+}
+
+void WebPage::setContextMenuEnabled(bool b)
+{
+    m_isContextMenuEnable = b;
+}
+
+bool WebPage::getContextMenuEnabled() const
+{
+    return m_isContextMenuEnable;
 }
 
 void WebPage::willEnterDebugLoop()
@@ -291,6 +302,12 @@ int WebPage::getCursorInfoType() const
     return -1;
 }
 
+void WebPage::setCursorInfoType(int type)
+{
+    if (m_pageImpl)
+        m_pageImpl->setCursorInfoType(type);
+}
+
 IntSize WebPage::viewportSize() const
 { 
     if (m_pageImpl)
@@ -314,13 +331,13 @@ void WebPage::setHWND(HWND hwnd)
 void WebPage::setHwndRenderOffset(const blink::IntPoint& offset)
 {
     if (m_pageImpl)
-        m_pageImpl->m_hwndRenderOffset = offset;
+        m_pageImpl->setHwndRenderOffset(offset);
 }
 
 blink::IntPoint WebPage::getHwndRenderOffset() const
 {
     if (m_pageImpl)
-        return m_pageImpl->m_hwndRenderOffset;
+        return m_pageImpl->getHwndRenderOffset();
     return blink::IntPoint();
 }
 
@@ -401,25 +418,8 @@ void WebPage::loadHTMLString(int64 frameId, const WebData& html, const WebURL& b
 
 void WebPage::setBackgroundColor(COLORREF c) {
     if (m_pageImpl)
-        m_pageImpl->m_bdColor = c;
+        m_pageImpl->setBackgroundColor(c);
 }
-
-#if (defined ENABLE_CEF) && (ENABLE_CEF == 1)
-CefBrowserHostImpl* WebPage::browser()
-{ 
-    ASSERT(m_pageImpl);
-    if (m_pageImpl)
-        return m_pageImpl->browser();
-    return nullptr;
-}
-
-void WebPage::setBrowser(CefBrowserHostImpl* browserImpl)
-{
-    ASSERT(m_pageImpl);
-    if (m_pageImpl)
-        m_pageImpl->setBrowser(browserImpl);
-}
-#endif
 
 bool WebPage::canGoBack()
 {
@@ -483,25 +483,6 @@ blink::WebScreenInfo WebPage::screenInfo()
     if (m_pageImpl)
         return m_pageImpl->screenInfo();
     return blink::WebScreenInfo();
-}
-
-PassRefPtr<net::PageNetExtraData> WebPage::getPageNetExtraData()
-{
-    if (m_pageImpl)
-        return m_pageImpl->m_pageNetExtraData;
-    return nullptr;
-}
-
-void WebPage::setCookieJarFullPath(const char* path)
-{
-    if (m_pageImpl)
-        return m_pageImpl->setCookieJarFullPath(path);
-}
-
-void WebPage::setLocalStorageFullPath(const char* path)
-{
-    if (m_pageImpl)
-        return m_pageImpl->setLocalStorageFullPath(path);
 }
 
 WebPage* WebPage::getSelfForCurrentContext()

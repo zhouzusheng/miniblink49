@@ -14,6 +14,9 @@ bool g_isDecodeUrlRequest = false;
 void* g_tipPaintCallback = nullptr;
 float g_contentScale = 1;
 bool g_rendererAntiAlias = false;
+bool g_diskCacheEnable = false;
+bool g_smootTextEnable = false;
+bool g_consoleOutputEnable = true;
 
 wkeUiThreadPostTaskCallback g_wkeUiThreadPostTaskCallback = nullptr;
 
@@ -30,6 +33,8 @@ wkeTempCallbackInfo g_wkeTempCallbackInfo;
 
 std::set<wkeWebView> g_liveWebViews;
 
+DWORD g_contextMenuItemMask = kWkeMenuSelectedAllId | kWkeMenuSelectedTextId | kWkeMenuUndoId | kWkeMenuCopyImageId | kWkeMenuInspectElementAtId |
+    kWkeMenuCutId | kWkeMenuPasteId;
 }
 
 WKE_FILE_OPEN g_pfnOpen;

@@ -41,14 +41,11 @@
 #include "third_party/WebKit/Source/wtf/FastAllocBase.h"
 #include "third_party/WebKit/public/platform/WebURLLoaderClient.h"
 #include "third_party/WebKit/Source/wtf/OwnPtr.h"
-
 #include <windows.h>
 #include <memory>
-
-#define CURL_STATICLIB 
 #include "third_party/libcurl/include/curl/curl.h"
 
-//#define MINIBLINK_NO_MULTITHREAD_NET 1
+#define MINIBLINK_NO_MULTITHREAD_NET 1
 
 // The allocations and releases in WebURLLoaderInternal are
 // Cocoa-exception-free (either simple Foundation classes or
@@ -73,6 +70,7 @@ class WebURLLoaderManagerMainTask;
 class WebURLLoaderManager;
 class FlattenHTTPBodyElementStream;
 struct InitializeHandleInfo;
+struct DiskCacheItem;
 
 class JobHead {
 public:
@@ -192,7 +190,9 @@ public:
     bool m_isBlackList;
     bool m_isDataUrl;
     bool m_isProxy;
+    bool m_isProxyConnect; // 是否使用代理的Connect请求
     bool m_isProxyHeadRequest;
+    bool m_needParseMime; // 如果response为空的时候，是否需要在recv data的时候分析
 
     InitializeHandleInfo* m_initializeHandleInfo;
     bool m_isHoldJobToAsynCommit;
@@ -215,7 +215,8 @@ public:
     wkeNetJobDataBind* m_dataBind;
     Vector<char> m_dataCacheForDownload; // 下载时需要先缓存再给外部
 #endif
-    RefPtr<PageNetExtraData> m_pageNetExtraData;
+
+    DiskCacheItem* m_diskCacheItem;
 };
 
 } // namespace net

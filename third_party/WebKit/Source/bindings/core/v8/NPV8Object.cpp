@@ -25,8 +25,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
 #include "bindings/core/v8/NPV8Object.h"
+#include "config.h"
 
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
@@ -38,15 +38,22 @@
 #include "bindings/core/v8/WrapperTypeInfo.h"
 #include "bindings/core/v8/npruntime_impl.h"
 #include "bindings/core/v8/npruntime_priv.h"
+#include "content/browser/WebPageImpl.h"
+#include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/page/ChromeClient.h"
+#include "net/cookies/WebCookieJarCurlImpl.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/UserGestureIndicator.h"
 #include "third_party/npapi/bindings/npfunctions.h"
+#include "web/WebViewImpl.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/StringExtras.h"
 #include "wtf/text/WTFString.h"
 #include <stdio.h>
+
+extern "C" WINBASEAPI BOOL WINAPI InternetSetCookieA(LPCSTR lpszUrl, LPCSTR lpszCookieName, LPCSTR lpszCookieData);
 
 #if ENABLE_WKE
 extern NPNetscapeFuncs s_wkeBrowserFuncs;
@@ -58,9 +65,9 @@ namespace blink {
 
 namespace {
 
-void trace(Visitor*, ScriptWrappable*)
-{
-}
+    void trace(Visitor*, ScriptWrappable*)
+    {
+    }
 
 } // namespace
 
@@ -103,8 +110,7 @@ static ScriptState* mainWorldScriptState(v8::Isolate* isolate, NPObject* npObjec
     return scriptState;
 }
 
-static PassOwnPtr<v8::Local<v8::Value>[]> createValueListFromVariantArgs(v8::Isolate* isolate, const NPVariant* arguments, uint32_t argumentCount, NPObject* owner)
-{
+static PassOwnPtr<v8::Local<v8::Value>[]> createValueListFromVariantArgs(v8::Isolate* isolate, const NPVariant* arguments, uint32_t argumentCount, NPObject* owner) {
     OwnPtr<v8::Local<v8::Value>[]> argv = adoptArrayPtr(new v8::Local<v8::Value>[argumentCount]);
     for (uint32_t index = 0; index < argumentCount; index++) {
         const NPVariant* arg = &arguments[index];
@@ -263,7 +269,7 @@ bool _NPN_Invoke(NPP npp, NPObject* npObject, NPIdentifier methodName, const NPV
         return false;
 
     ScriptState::Scope scope(scriptState);
-    ExceptionCatcher exceptionCatcher;
+    ExceptionCatcher exceptionCatcher(isolate);
 
     v8::Local<v8::Object> v8Object = v8::Local<v8::Object>::New(isolate, v8NpObject->v8Object);
     v8::Local<v8::Value> functionObject;
@@ -318,7 +324,7 @@ bool _NPN_InvokeDefault(NPP npp, NPObject* npObject, const NPVariant* arguments,
         return false;
 
     ScriptState::Scope scope(scriptState);
-    ExceptionCatcher exceptionCatcher;
+    ExceptionCatcher exceptionCatcher(isolate);
 
     // Lookup the function object and call it.
     v8::Local<v8::Object> functionObject = v8::Local<v8::Object>::New(isolate, v8NpObject->v8Object);
@@ -350,6 +356,43 @@ bool _NPN_Evaluate(NPP npp, NPObject* npObject, NPString* npScript, NPVariant* r
     return _NPN_EvaluateHelper(npp, popupsAllowed, npObject, npScript, result);
 }
 
+void parseCookieKeyValue(const String& cookie, Vector<String>* keys, Vector<String>* values)
+{
+    String cookieStr(cookie);
+
+    size_t posA = 0;
+    size_t posB = 0;
+    String key;
+    String value;
+
+    if (cookieStr.length() < 3)
+        return;
+
+    if (cookieStr[cookieStr.length() - 1] != ';')
+        cookieStr.append("; ");
+
+    for (size_t i = 0; i < cookieStr.length(); ++i) {
+        if ('=' == cookieStr[i]) {
+            posB = i;
+            key = cookieStr.substring(posA, posB - posA);
+            ++i;
+            posA = i;
+        } else if (';' == cookieStr[i]) {
+            posB = i;
+            value = cookieStr.substring(posA, posB - posA);
+            ++i;
+            if (i >= cookieStr.length())
+                break;
+            if (' ' == cookieStr[i])
+                ++i;
+            posA = i;
+
+            keys->append(key);
+            values->append(value);
+        }
+    }
+}
+
 bool _NPN_EvaluateHelper(NPP npp, bool popupsAllowed, NPObject* npObject, NPString* npScript, NPVariant* result)
 {
     if (result) {
@@ -379,7 +422,7 @@ bool _NPN_EvaluateHelper(NPP npp, bool popupsAllowed, NPObject* npObject, NPStri
         return false;
 
     ScriptState::Scope scope(scriptState);
-    ExceptionCatcher exceptionCatcher;
+    ExceptionCatcher exceptionCatcher(isolate);
 
     // FIXME: Is this branch still needed after switching to using UserGestureIndicator?
     String filename;
@@ -414,7 +457,7 @@ bool _NPN_GetProperty(NPP npp, NPObject* npObject, NPIdentifier propertyName, NP
             return false;
 
         ScriptState::Scope scope(scriptState);
-        ExceptionCatcher exceptionCatcher;
+        ExceptionCatcher exceptionCatcher(isolate);
 
         v8::Local<v8::Object> obj = v8::Local<v8::Object>::New(isolate, object->v8Object);
         v8::Local<v8::Value> v8result;
@@ -450,7 +493,7 @@ bool _NPN_SetProperty(NPP npp, NPObject* npObject, NPIdentifier propertyName, co
             return false;
 
         ScriptState::Scope scope(scriptState);
-        ExceptionCatcher exceptionCatcher;
+        ExceptionCatcher exceptionCatcher(isolate);
 
         v8::Local<v8::Object> obj = v8::Local<v8::Object>::New(isolate, object->v8Object);
         return v8CallBoolean(obj->Set(scriptState->context(), npIdentifierToV8Identifier(isolate, propertyName), convertNPVariantToV8Object(isolate, value, object->rootObject->frame()->script().windowScriptNPObject())));
@@ -484,7 +527,7 @@ bool _NPN_RemoveProperty(NPP npp, NPObject* npObject, NPIdentifier propertyName)
     if (!scriptState)
         return false;
     ScriptState::Scope scope(scriptState);
-    ExceptionCatcher exceptionCatcher;
+    ExceptionCatcher exceptionCatcher(isolate);
 
     v8::Local<v8::Object> obj = v8::Local<v8::Object>::New(isolate, object->v8Object);
     // FIXME: Verify that setting to undefined is right.
@@ -502,7 +545,7 @@ bool _NPN_HasProperty(NPP npp, NPObject* npObject, NPIdentifier propertyName)
         if (!scriptState)
             return false;
         ScriptState::Scope scope(scriptState);
-        ExceptionCatcher exceptionCatcher;
+        ExceptionCatcher exceptionCatcher(isolate);
 
         v8::Local<v8::Object> obj = v8::Local<v8::Object>::New(scriptState->isolate(), object->v8Object);
         return v8CallBoolean(obj->Has(scriptState->context(), npIdentifierToV8Identifier(scriptState->isolate(), propertyName)));
@@ -529,7 +572,7 @@ bool _NPN_HasMethod(NPP npp, NPObject* npObject, NPIdentifier methodName)
         if (!scriptState)
             return false;
         ScriptState::Scope scope(scriptState);
-        ExceptionCatcher exceptionCatcher;
+        ExceptionCatcher exceptionCatcher(isolate);
 
         v8::Local<v8::Object> obj = v8::Local<v8::Object>::New(isolate, object->v8Object);
         v8::Local<v8::Value> prop;
@@ -548,7 +591,7 @@ bool _NPN_HasMethod(NPP npp, NPObject* npObject, NPIdentifier methodName)
     return false;
 }
 
-void _NPN_SetException(NPObject* npObject, const NPUTF8 *message)
+void _NPN_SetException(NPObject* npObject, const NPUTF8* message)
 {
     if (!npObject || !npObjectToV8NPObject(npObject)) {
         v8::HandleScope handleScope(v8::Isolate::GetCurrent());
@@ -564,7 +607,7 @@ void _NPN_SetException(NPObject* npObject, const NPUTF8 *message)
         return;
 
     ScriptState::Scope scope(scriptState);
-    ExceptionCatcher exceptionCatcher;
+    ExceptionCatcher exceptionCatcher(isolate);
 
     V8ThrowException::throwGeneralError(isolate, message);
 }
@@ -579,7 +622,7 @@ bool _NPN_Enumerate(NPP npp, NPObject* npObject, NPIdentifier** identifier, uint
         if (!scriptState)
             return false;
         ScriptState::Scope scope(scriptState);
-        ExceptionCatcher exceptionCatcher;
+        ExceptionCatcher exceptionCatcher(scriptState->isolate());
 
         v8::Local<v8::Object> obj = v8::Local<v8::Object>::New(scriptState->isolate(), object->v8Object);
 
@@ -587,14 +630,13 @@ bool _NPN_Enumerate(NPP npp, NPObject* npObject, NPIdentifier** identifier, uint
 
         // FIXME: Figure out how to cache this helper function.  Run a helper function that collects the properties
         // on the object into an array.
-        const char enumeratorCode[] =
-            "(function (obj) {"
-            "  var props = [];"
-            "  for (var prop in obj) {"
-            "    props[props.length] = prop;"
-            "  }"
-            "  return props;"
-            "});";
+        const char enumeratorCode[] = "(function (obj) {"
+                                      "  var props = [];"
+                                      "  for (var prop in obj) {"
+                                      "    props[props.length] = prop;"
+                                      "  }"
+                                      "  return props;"
+                                      "});";
         v8::Local<v8::String> source = v8AtomicString(scriptState->isolate(), enumeratorCode);
         v8::Local<v8::Value> result;
         if (!V8ScriptRunner::compileAndRunInternalScript(source, scriptState->isolate()).ToLocal(&result))
@@ -614,13 +656,14 @@ bool _NPN_Enumerate(NPP npp, NPObject* npObject, NPIdentifier** identifier, uint
             v8::Local<v8::Value> name;
             if (!props->Get(scriptState->context(), v8::Integer::New(scriptState->isolate(), i)).ToLocal(&name))
                 return false;
-            (*identifier)[i] = getStringIdentifier(v8::Local<v8::String>::Cast(name));
+
+            (*identifier)[i] = getStringIdentifier(scriptState->isolate(), v8::Local<v8::String>::Cast(name));
         }
         return true;
     }
 
     if (NP_CLASS_STRUCT_VERSION_HAS_ENUM(npObject->_class) && npObject->_class->enumerate)
-       return npObject->_class->enumerate(npObject, identifier, count);
+        return npObject->_class->enumerate(npObject, identifier, count);
 
     if (s_wkeBrowserFuncs.enumerate) {
         return s_wkeBrowserFuncs.enumerate(npp, npObject, identifier, count);
@@ -639,7 +682,7 @@ bool _NPN_Construct(NPP npp, NPObject* npObject, const NPVariant* arguments, uin
         if (!scriptState)
             return false;
         ScriptState::Scope scope(scriptState);
-        ExceptionCatcher exceptionCatcher;
+        ExceptionCatcher exceptionCatcher(scriptState->isolate());
 
         // Lookup the constructor function.
         v8::Local<v8::Object> ctorObj = v8::Local<v8::Object>::New(scriptState->isolate(), object->v8Object);

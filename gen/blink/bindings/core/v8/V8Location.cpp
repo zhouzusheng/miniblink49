@@ -384,12 +384,8 @@ static void assignOriginSafeMethodGetter(const v8::PropertyCallbackInfo<v8::Valu
         v8SetReturnValue(info, sharedTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
         return;
     }
-    //zero
-#if V8_MINOR_VERSION == 7
+
     v8::Local<v8::Value> hiddenValue = blink::V8HiddenValue::getHiddenValue(info.GetIsolate(), v8::Local<v8::Object>::Cast(info.This()), v8AtomicString(info.GetIsolate(), "assign"));
-#else
-    v8::Local<v8::Value> hiddenValue = v8::Local<v8::Object>::Cast(info.This())->GetHiddenValue(v8AtomicString(info.GetIsolate(), "assign"));
-#endif
     if (!hiddenValue.IsEmpty()) {
         v8SetReturnValue(info, hiddenValue);
         return;
@@ -447,12 +443,8 @@ static void replaceOriginSafeMethodGetter(const v8::PropertyCallbackInfo<v8::Val
         v8SetReturnValue(info, sharedTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
         return;
     }
-    //zero
-#if V8_MINOR_VERSION == 7
+
     v8::Local<v8::Value> hiddenValue = blink::V8HiddenValue::getHiddenValue(info.GetIsolate(), v8::Local<v8::Object>::Cast(info.This()), v8AtomicString(info.GetIsolate(), "replace"));
-#else
-    v8::Local<v8::Value> hiddenValue = v8::Local<v8::Object>::Cast(info.This())->GetHiddenValue(v8AtomicString(info.GetIsolate(), "replace"));
-#endif
     if (!hiddenValue.IsEmpty()) {
         v8SetReturnValue(info, hiddenValue);
         return;
@@ -560,7 +552,7 @@ static void installV8LocationTemplate(v8::Local<v8::FunctionTemplate> functionTe
     v8::Local<v8::ObjectTemplate> prototypeTemplate = functionTemplate->PrototypeTemplate();
     ALLOW_UNUSED_LOCAL(prototypeTemplate);
     //zero
-#if V8_MINOR_VERSION == 7
+#if V8_MAJOR_VERSION > 5 || (V8_MAJOR_VERSION == 5 && V8_MINOR_VERSION == 7)
 
 #else
     instanceTemplate->SetAccessCheckCallbacks(LocationV8Internal::namedSecurityCheck, LocationV8Internal::indexedSecurityCheck, v8::External::New(isolate, const_cast<WrapperTypeInfo*>(&V8Location::wrapperTypeInfo)));

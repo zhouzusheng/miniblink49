@@ -1,6 +1,5 @@
 
 #include "config.h"
-#include "base/rand_util.h"
 #include "content/web_impl_win/BlinkPlatformImpl.h"
 #include "content/web_impl_win/WebThreadImpl.h"
 #include "content/web_impl_win/WebURLLoaderImpl.h"
@@ -49,6 +48,8 @@
 #include "net/WebURLLoaderManager.h"
 #include "net/WebStorageNamespaceImpl.h"
 #include "wke/wkeUtil.h"
+#include "base/rand_util.h"
+#include "base/values.h"
 #include <crtdbg.h>
 
 DWORD g_paintToMemoryCanvasInUiThreadCount = 0;
@@ -178,8 +179,12 @@ static void setRuntimeEnabledFeatures()
     blink::RuntimeEnabledFeatures::setCspCheckEnabled(true);
     blink::RuntimeEnabledFeatures::setNpapiPluginsEnabled(true);
     blink::RuntimeEnabledFeatures::setDOMConvenienceAPIEnabled(true);
-    blink::RuntimeEnabledFeatures::setTextBlobEnabled(true);    
+    blink::RuntimeEnabledFeatures::setTextBlobEnabled(true);
+    blink::RuntimeEnabledFeatures::setCssVariablesEnabled(true);
+    blink::RuntimeEnabledFeatures::setCSSMotionPathEnabled(true);
 }
+
+typedef BOOL (WINAPI* PFN_SetThreadStackGuarantee)(PULONG StackSizeInBytes);
 
 void BlinkPlatformImpl::initialize()
 {
@@ -187,6 +192,11 @@ void BlinkPlatformImpl::initialize()
     scrt_initialize_thread_safe_statics();
 #endif
     x86_check_features();
+    //_control87(0x133f, 0xffff);
+
+//     ULONG stackSizeInBytes = 894 * 1024;
+//     PFN_SetThreadStackGuarantee pSetThreadStackGuarantee = (PFN_SetThreadStackGuarantee)::GetProcAddress(::GetModuleHandleW(L"Kernel32.dll"), "SetThreadStackGuarantee");
+//     pSetThreadStackGuarantee(&stackSizeInBytes);
     
     ::CoInitializeEx(nullptr, 0); // COINIT_MULTITHREADED
     ::OleInitialize(nullptr);
@@ -218,8 +228,6 @@ void BlinkPlatformImpl::initialize()
     
 //     platform->m_perfTimer = new blink::Timer<BlinkPlatformImpl>(platform, &BlinkPlatformImpl::perfTimer);
 //     platform->m_perfTimer->start(2, 2, FROM_HERE);
-
-    //OutputDebugStringW(L"BlinkPlatformImpl::initBlink\n");
 }
 
 BlinkPlatformImpl::BlinkPlatformImpl() 
@@ -628,7 +636,7 @@ blink::WebString BlinkPlatformImpl::userAgent()
 
 const char* BlinkPlatformImpl::getUserAgent()
 {
-    const char* defaultUA = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.2171.99 Safari/537.36";
+    const char* defaultUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36";
     BlinkPlatformImpl* self = (BlinkPlatformImpl*)blink::Platform::current();
     if (!self)
         return defaultUA;
@@ -640,24 +648,6 @@ void BlinkPlatformImpl::setUserAgent(const char* ua)
     if (m_userAgent)
         delete m_userAgent;
     m_userAgent = new std::string(ua);
-}
-
-void readJsFile(const wchar_t* path, std::vector<char>* buffer)
-{
-    HANDLE hFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (INVALID_HANDLE_VALUE == hFile) {
-        DebugBreak();
-        return;
-    }
-
-    DWORD fileSizeHigh;
-    const DWORD bufferSize = ::GetFileSize(hFile, &fileSizeHigh);
-
-    DWORD numberOfBytesRead = 0;
-    buffer->resize(bufferSize);
-    BOOL b = ::ReadFile(hFile, &buffer->at(0), bufferSize, &numberOfBytesRead, nullptr);
-    ::CloseHandle(hFile);
-    b = b;
 }
 
 blink::WebData BlinkPlatformImpl::loadResource(const char* name)
@@ -846,14 +836,9 @@ blink::WebURLError BlinkPlatformImpl::cancelledError(const blink::WebURL& url) c
 
 blink::WebStorageNamespace* BlinkPlatformImpl::createLocalStorageNamespace()
 {
-#ifndef MINIBLINK_NO_PAGE_LOCALSTORAGE
-    RELEASE_ASSERT(false);
-    return nullptr;
-#else
     if (!m_localStorageStorageMap)
         m_localStorageStorageMap = new DOMStorageMapWrap();
-    return new blink::WebStorageNamespaceImpl("", blink::kLocalStorageNamespaceId, &m_localStorageStorageMap->map, true);
-#endif
+    return new net::WebStorageNamespaceImpl("", net::kLocalStorageNamespaceId, &m_localStorageStorageMap->map, true);
 }
 
 blink::WebStorageNamespace* BlinkPlatformImpl::createSessionStorageNamespace()

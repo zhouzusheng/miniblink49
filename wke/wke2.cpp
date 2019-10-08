@@ -29,6 +29,14 @@
 #include <v8.h>
 #include <shlwapi.h>
 
+namespace net {
+
+void WSCI_setHook(void* j, void* hook);
+void WSCI_sendtext(void* j, char* buf, size_t len);
+void WSCI_sendblob(void* j, char* buf, size_t len);
+
+}
+
 namespace wke {
 
 bool setDebugConfig(wkeWebView webview, const char* debugString, const char* param)
@@ -36,4 +44,43 @@ bool setDebugConfig(wkeWebView webview, const char* debugString, const char* par
     return false;
 }
 
+bool getDebugConfig(wkeWebView webview, const char* debugString, void **ret)
+{
+    return false;
+}
+
+
+const wkePdfDatas* printToPdf(wkeWebView webView, blink::WebFrame* webFrame, const wkePrintSettings* params)
+{
+    return nullptr;
+}
+
+const wkeMemBuf* printToBitmap(wkeWebView webView, const wkeScreenshotSettings* settings)
+{
+    return nullptr;
+}
+
+}
+
+void wkeUtilRelasePrintPdfDatas(const wkePdfDatas* datas)
+{
+    for (int i = 0; i < datas->count; ++i) {
+        free((void *)(datas->datas[i]));
+    }
+
+    free((void *)(datas->sizes));
+    free((void *)(datas->datas));
+    delete datas;
+}
+
+const wkePdfDatas* wkeUtilPrintToPdf(wkeWebView webView, wkeWebFrameHandle frameId, const wkePrintSettings* settings)
+{
+    content::WebPage* webPage = webView->webPage();
+    blink::WebFrame* webFrame = webPage->getWebFrameFromFrameId(wke::CWebView::wkeWebFrameHandleToFrameId(webPage, frameId));
+    return wke::printToPdf(webView, webFrame, settings);
+}
+
+const wkeMemBuf* wkePrintToBitmap(wkeWebView webView, wkeWebFrameHandle frameId, const wkeScreenshotSettings* settings)
+{
+    return wke::printToBitmap(webView, settings);
 }

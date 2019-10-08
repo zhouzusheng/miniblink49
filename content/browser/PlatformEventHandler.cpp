@@ -15,6 +15,7 @@ namespace content {
 
 static const unsigned short HIGH_BIT_MASK_SHORT = 0x8000;
 
+// Source\WebCore\platform\win\KeyEventWin.cpp
 static bool isKeypadEvent(WPARAM code, LPARAM keyData, WebInputEvent::Type type)
 {
     if (type != WebInputEvent::RawKeyDown && type != WebInputEvent::KeyUp)
@@ -59,6 +60,49 @@ static bool isKeypadEvent(WPARAM code, LPARAM keyData, WebInputEvent::Type type)
 
 static inline String singleCharacterString(UChar c) { return String(&c, 1); }
 
+bool isShiftPressed()
+{
+    return (::GetKeyState(VK_SHIFT) & 0x8000) == 0x8000;
+}
+
+bool isCtrlPressed()
+{
+    return (::GetKeyState(VK_CONTROL) & 0x8000) == 0x8000;
+}
+
+bool isAltPressed()
+{
+    return (::GetKeyState(VK_MENU) & 0x8000) == 0x8000;
+}
+
+bool isAltGrPressed()
+{
+    return (::GetKeyState(VK_MENU) & 0x8000) == 0x8000 && (::GetKeyState(VK_CONTROL) & 0x8000) == 0x8000;
+}
+
+bool isWindowsKeyPressed()
+{
+    return (::GetKeyState(VK_LWIN) & 0x8000) == 0x8000 || (::GetKeyState(VK_RWIN) & 0x8000) == 0x8000;
+}
+
+bool isCapsLockOn()
+{
+    return (::GetKeyState(VK_CAPITAL) & 0x0001) == 0x0001;
+}
+
+bool isNumLockOn()
+{
+    return (::GetKeyState(VK_NUMLOCK) & 0x0001) == 0x0001;
+}
+
+bool isScrollLockOn()
+{
+    return (::GetKeyState(VK_SCROLL) & 0x0001) == 0x0001;
+}
+
+// src\ui\events\blink\blink_event_util.cc
+// src\ui\events\win\events_win.cc
+// src\ui\events\keycodes\dom\keycode_converter.cc
 static void buildModifiers(WebInputEvent* evt)
 {
     if (GetKeyState(VK_SHIFT) & HIGH_BIT_MASK_SHORT)
@@ -67,19 +111,21 @@ static void buildModifiers(WebInputEvent* evt)
         evt->modifiers |= WebInputEvent::ControlKey;
     if (GetKeyState(VK_MENU) & HIGH_BIT_MASK_SHORT)
         evt->modifiers |= WebInputEvent::AltKey;
+    if (isCapsLockOn())
+        evt->modifiers |= WebInputEvent::CapsLockOn;
+    if (isNumLockOn())
+        evt->modifiers |= WebInputEvent::NumLockOn;
 }
 
 WebKeyboardEvent PlatformEventHandler::buildKeyboardEvent(WebInputEvent::Type type, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    unsigned int virtualKeyCode = wParam;
-    unsigned int flags = 0;
-    if (HIWORD(lParam) & KF_REPEAT)
-        flags |= KF_REPEAT;
-    if (HIWORD(lParam) & KF_EXTENDED)
-        flags |= KF_REPEAT;
-    bool systemKey = false;
+//     unsigned int flags = 0;
+//     if (HIWORD(lParam) & KF_REPEAT)
+//         flags |= KF_REPEAT;
+//     if (HIWORD(lParam) & KF_EXTENDED)
+//         flags |= KF_REPEAT;
 
-    LPARAM keyData = MAKELPARAM(0, (WORD)flags);
+    LPARAM keyData = lParam; // MAKELPARAM(0, (WORD)flags);
     WebKeyboardEvent keyEvent;
     keyEvent.windowsKeyCode = (type == WebInputEvent::RawKeyDown || type == WebInputEvent::KeyUp) ? wParam : 0;
     keyEvent.nativeKeyCode = wParam;
@@ -145,9 +191,9 @@ static void makeDraggableRegionNcHitTest(HWND hWnd, LPARAM lParam, bool* isDragg
 }
 
 PlatformEventHandler::PlatformEventHandler(WebWidget* webWidget, WebViewImpl* webViewImpl)
+    : m_checkMouseLeaveTimer(this, &PlatformEventHandler::checkMouseLeave)
 {
     m_isDraggableRegionNcHitTest = false;
-    m_bMouseTrack = false;
     m_postMouseLeave = false;
     m_mouseInWindow = false;
     m_isAlert = false;
@@ -223,7 +269,7 @@ static bool isNearPos(const blink::IntPoint& a, const blink::IntPoint& b)
     return std::abs(a.x() - b.x()) + std::abs(a.y() - b.y()) < 15;
 }
 
-static void postDragMessageImpl(HWND hWnd, void* param)
+static void WKE_CALL_TYPE postDragMessageImpl(HWND hWnd, void* param)
 {
     ::ReleaseCapture();
     ::PostMessage(hWnd, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, 0);
@@ -276,8 +322,8 @@ void PlatformEventHandler::buildMousePosInfo(HWND hWnd, UINT message, WPARAM wPa
         lParam = MAKELPARAM(ptCursor.x, ptCursor.y);
     } else {
         m_postMouseLeave = false;
-        pos->setX(((int)(short)LOWORD(lParam)));
-        pos->setY(((int)(short)HIWORD(lParam)));
+        pos->setX(/*m_offset.x() +*/ ((int)(short)LOWORD(lParam)));
+        pos->setY(/*m_offset.y() +*/ ((int)(short)HIWORD(lParam)));
 
         POINT widgetPoint = { pos->x(), pos->y() };
         ::ClientToScreen(hWnd, &widgetPoint);
@@ -301,8 +347,33 @@ bool PlatformEventHandler::fireMouseUpEventIfNeeded(HWND hWnd, UINT message, WPA
     return true;
 }
 
+void PlatformEventHandler::checkMouseLeave(blink::Timer<PlatformEventHandler>*)
+{
+    if (!m_hWnd || !::IsWindow(m_hWnd)) {
+        m_checkMouseLeaveTimer.stop();
+        return;
+    }
+
+    POINT pt = { 0 };
+    ::GetCursorPos(&pt);
+
+    RECT rc;
+    ::GetClientRect(m_hWnd, &rc);
+    ::ScreenToClient(m_hWnd, &pt);
+
+    if ((!::PtInRect(&rc, pt) || !::IsWindowVisible(m_hWnd))) {
+        if (!m_isLeftMousedown) {
+            MouseEvtInfo info = { true, false, nullptr };
+            LPARAM lParam = MAKELONG(pt.x, pt.y);
+            fireMouseEvent(m_hWnd, WM_MOUSELEAVE, 0, lParam, info, nullptr);
+        }
+        m_checkMouseLeaveTimer.stop();
+    }
+}
+
 LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, const MouseEvtInfo& info, BOOL* bHandle)
 {
+    m_hWnd = hWnd;
     bool handle = false;
 
     m_isDraggableRegionNcHitTest = false;
@@ -310,16 +381,6 @@ LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wPa
         return 0;
 
     bool isValideWindow = ::IsWindow(hWnd) && !info.isWillDestroy;
-
-    if (m_bMouseTrack && !m_postMouseLeave && hWnd) {
-        TRACKMOUSEEVENT csTME;
-        csTME.cbSize = sizeof(csTME);
-        csTME.dwFlags = TME_LEAVE | TME_HOVER;
-        csTME.hwndTrack = hWnd;  // 指定要追踪的窗口
-        csTME.dwHoverTime = 10;    // 鼠标在按钮上停留超过10ms，才认为状态为HOVER
-        ::TrackMouseEvent(&csTME); // 开启Windows的WM_MOUSELEAVE，WM_MOUSEHOVER事件支持
-        m_bMouseTrack = false;     // 若已经追踪，则停止追踪
-    }
 
     if (fireMouseUpEventIfNeeded(hWnd, message, wParam, lParam, info, bHandle))
         return 0;
@@ -332,8 +393,10 @@ LRESULT PlatformEventHandler::fireMouseEvent(HWND hWnd, UINT message, WPARAM wPa
 
     buildMousePosInfo(hWnd, message, wParam, lParam, &handle, &pos, &globalPos);
 
+    if (!m_checkMouseLeaveTimer.isActive())
+        m_checkMouseLeaveTimer.startRepeating(0.2, FROM_HERE);
     if (WM_MOUSELEAVE == message)
-        m_bMouseTrack = true;
+        m_checkMouseLeaveTimer.stop();
 
     double time = WTF::currentTime();
     WebMouseEvent webMouseEvent;

@@ -4,11 +4,14 @@
 #include "wke/wkeWebWindow.h"
 #include "wke/wkeGlobalVar.h"
 #include "content/browser/WebPage.h"
+#include "cc/base/BdColor.h"
+#include "base/strings/string_util.h"
 ////////////////////////////////////////////////////////////////////////////
 
 namespace wke {
 
-CWebWindow::CWebWindow()
+CWebWindow::CWebWindow(COLORREF c)
+    : CWebView(c)
 {
     m_state = kWkeWebWindowUninit;
 
@@ -29,13 +32,13 @@ CWebWindow::~CWebWindow()
     destroy();
 }
 
-bool CWebWindow::create(HWND parent, unsigned styles, unsigned styleEx, int x, int y, int width, int height)
+bool CWebWindow::createWindow(const wkeWindowCreateInfo* info)
 {
     CWebView::create();
-    return _createWindow(parent, styles, styleEx, x, y, width, height);
+    return _createWindow(info);
 }
 
-bool CWebWindow::create(HWND parent, wkeWindowType type, int x, int y, int width, int height)
+bool CWebWindow::createWindow(HWND parent, wkeWindowType type, int x, int y, int width, int height)
 {
     unsigned styles = 0;
     unsigned styleEx = 0;
@@ -59,7 +62,17 @@ bool CWebWindow::create(HWND parent, wkeWindowType type, int x, int y, int width
         wkeSetTransparent(this, false);
     }
 
-    return create(parent, styles, styleEx, x, y, width, height);
+    wkeWindowCreateInfo info;
+    info.size = sizeof(wkeWindowCreateInfo);
+    info.parent = parent;
+    info.style = styles;
+    info.styleEx = styleEx;
+    info.x = x;
+    info.y = y;
+    info.width = width;
+    info.height = height;
+    info.color = cc::s_kBgColor;
+    return createWindow(&info);
 }
 
 void CWebWindow::destroy()
@@ -85,7 +98,7 @@ void CWebWindow::onDocumentReady(wkeDocumentReadyCallback callback, void* callba
     m_originalDocumentReadyCallbackParam = callbackParam;
 }
 
-bool CWebWindow::_createWindow(HWND parent, unsigned styles, unsigned styleEx, int x, int y, int width, int height)
+bool CWebWindow::_createWindow(const wkeWindowCreateInfo* info)
 {
     if (IsWindow(m_hWnd))
         return true;
@@ -131,15 +144,15 @@ bool CWebWindow::_createWindow(HWND parent, unsigned styles, unsigned styleEx, i
     //    styles |=  WS_VISIBLE;
 
     m_hWnd = CreateWindowExW(
-        styleEx,        // window ex-style
+        info->styleEx,        // window ex-style
         szClassName,    // window class name
         L"wkeWebWindow", // window caption
-        styles,         // window style
-        x,              // initial x position
-        y,              // initial y position
-        width,          // initial x size
-        height,         // initial y size
-        parent,         // parent window handle
+        info->style,         // window style
+        info->x,              // initial x position
+        info->y,              // initial y position
+        info->width,          // initial x size
+        info->height,         // initial y size
+        info->parent,         // parent window handle
         NULL,           // window menu handle
         GetModuleHandleW(NULL),           // program instance handle
         this);         // creation parameters
@@ -147,7 +160,7 @@ bool CWebWindow::_createWindow(HWND parent, unsigned styles, unsigned styleEx, i
     if (!IsWindow(m_hWnd))
         return FALSE;
 
-    CWebView::resize(width, height);
+    CWebView::resize(info->width, info->height);
     return TRUE;
 }
 
@@ -397,26 +410,20 @@ LRESULT CWebWindow::_windowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     //    }
     //    break;
 
+    case WM_SYSKEYDOWN: // no break
     case WM_KEYDOWN: {
         unsigned int virtualKeyCode = wParam;
         unsigned int flags = 0;
-        if (HIWORD(lParam) & KF_REPEAT)
-            flags |= WKE_REPEAT;
-        if (HIWORD(lParam) & KF_EXTENDED)
-            flags |= WKE_EXTENDED;
-
+        flags = lParam;
         if (wkeFireKeyDownEvent(this, virtualKeyCode, flags, false))
             return 0;
         break;
     }
+    case WM_SYSKEYUP: // no break
     case WM_KEYUP: {
         unsigned int virtualKeyCode = wParam;
         unsigned int flags = 0;
-        if (HIWORD(lParam) & KF_REPEAT)
-            flags |= WKE_REPEAT;
-        if (HIWORD(lParam) & KF_EXTENDED)
-            flags |= WKE_EXTENDED;
-
+        flags = lParam;
         if (wkeFireKeyUpEvent(this, virtualKeyCode, flags, false))
             return 0;
         break;
@@ -541,16 +548,20 @@ LRESULT CWebWindow::_windowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     case WM_IME_STARTCOMPOSITION: {
         wkeRect caret = wkeGetCaretRect(this);
 
+        blink::IntPoint offset = m_webPage->getHwndRenderOffset();
+
         COMPOSITIONFORM COMPOSITIONFORM;
         COMPOSITIONFORM.dwStyle = CFS_POINT | CFS_FORCE_POSITION;
-        COMPOSITIONFORM.ptCurrentPos.x = caret.x;
-        COMPOSITIONFORM.ptCurrentPos.y = caret.y;
+        COMPOSITIONFORM.ptCurrentPos.x = caret.x + offset.x();
+        COMPOSITIONFORM.ptCurrentPos.y = caret.y + offset.y();
 
         HIMC hIMC = ::ImmGetContext(hwnd);
         ::ImmSetCompositionWindow(hIMC, &COMPOSITIONFORM);
         ::ImmReleaseContext(hwnd, hIMC);
     }
         return 0;
+    case WM_GETDLGCODE: // 使得MB控件作为对话框子窗口时可接收到键盘消息
+        return DLGC_WANTARROWS | DLGC_WANTALLKEYS | DLGC_WANTCHARS;
     }
 
     return ::DefWindowProcW(hwnd, message, wParam, lParam);
@@ -725,9 +736,8 @@ void CWebWindow::setTitle(const wchar_t* text)
 
 void CWebWindow::setTitle(const utf8* text)
 {
-    wchar_t wtext[1024 * 64 + 1] = { 0 };
-    MultiByteToWideChar(CP_UTF8, 0, text, strlen(text), wtext, 1024*64);
-    setTitle(wtext);
+    std::wstring textW = base::UTF8ToWide(text);
+    setTitle(textW.c_str());
 }
 
 void CWebWindow::setTransparent(bool transparent)

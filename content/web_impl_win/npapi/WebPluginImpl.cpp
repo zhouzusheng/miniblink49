@@ -500,7 +500,11 @@ void WebPluginImpl::performRequest(PluginRequest* request)
 
         CString cstr;        
         if (result->IsString()) {
+#if V8_MAJOR_VERSION > 5
+            v8::Local<v8::String> v8String = result->ToString(toIsolate(m_parentFrame));
+#else
             v8::Local<v8::String> v8String = result->ToString();
+#endif
             resultString = v8StringToWebCoreString<String>(v8String, blink::Externalize);
             cstr = resultString.utf8();
         }
@@ -1424,6 +1428,19 @@ void WebPluginImpl::didFinishLoadingFrameRequest(const WebURL&, void* notifyData
 void WebPluginImpl::didFailLoadingFrameRequest(const WebURL&, void* notifyData, const WebURLError&)
 {
     DebugBreak();
+}
+
+int WebPluginImpl::printBegin(const blink::WebPrintParams& printParams)
+{ 
+    return 0;
+}
+
+void WebPluginImpl::printPage(int pageNumber, blink::WebCanvas* canvas)
+{
+}
+
+void WebPluginImpl::printEnd()
+{
 }
 
 } // namespace content
